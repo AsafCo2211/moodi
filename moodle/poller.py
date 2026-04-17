@@ -1,8 +1,30 @@
 import sqlite3
 from datetime import datetime
 from database import get_connection
-from moodle.client import get_assignments, get_grades
-from moodle.parser import parse_assignments, parse_grades
+from moodle.client import get_assignments, get_grades, get_grades_table
+from moodle.parser import parse_assignments, parse_grades, parse_grades_table
+
+
+def save_grades(cursor, user_id: int, grades: list):
+    """שומר ציונים ל-DB, מזהה ציונים חדשים ועדכונים."""
+    for grade in grades:
+        existing = cursor.execute("""
+            SELECT grade FROM grades 
+            WHERE user_id = ? AND course_name = ? AND item_name = ?
+        """, (user_id, grade["course_name"], grade["item_name"])).fetchone()
+
+        if existing is None:
+            cursor.execute("""
+                INSERT INTO grades (user_id, course_name, item_name, grade)
+                VALUES (?, ?, ?, ?)
+            """, (user_id, grade["course_name"], grade["item_name"], grade["grade"]))
+
+        elif existing["grade"] != grade["grade"]:
+            cursor.execute("""
+                UPDATE grades 
+                SET grade = ?, notified = 0, detected_at = CURRENT_TIMESTAMP
+                WHERE user_id = ? AND course_name = ? AND item_name = ?
+            """, (grade["grade"], user_id, grade["course_name"], grade["item_name"]))
 
 
 def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list, course_map: dict):
@@ -37,30 +59,25 @@ def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list,
         # --- ציונים ---
         for course_id in course_ids:
             course_name = course_map.get(course_id, "")
-            raw_grades = get_grades(wstoken, moodle_user_id, course_id)
-            grades = parse_grades(raw_grades, course_name)
+            grades = []
 
-            for grade in grades:
-                # בדוק אם הציון כבר קיים עם אותו ערך
-                existing = cursor.execute("""
-                    SELECT grade FROM grades 
-                    WHERE user_id = ? AND course_name = ? AND item_name = ?
-                """, (user_id, grade["course_name"], grade["item_name"])).fetchone()
+            # ניסיון ראשון — API סטנדרטי
+            try:
+                raw_grades = get_grades(wstoken, moodle_user_id, course_id)
+                grades = parse_grades(raw_grades, course_name)
+            except Exception:
+                pass
 
-                if existing is None:
-                    # ציון חדש לגמרי
-                    cursor.execute("""
-                        INSERT INTO grades (user_id, course_name, item_name, grade)
-                        VALUES (?, ?, ?, ?)
-                    """, (user_id, grade["course_name"], grade["item_name"], grade["grade"]))
+            # אם לא קיבלנו ציונים — fallback לגרסה החלופית
+            if not grades:
+                try:
+                    raw_table = get_grades_table(wstoken, moodle_user_id, course_id)
+                    grades = parse_grades_table(raw_table, course_name)
+                except Exception as e:
+                    print(f"  Skipping grades for {course_name}: {e}")
+                    continue
 
-                elif existing["grade"] != grade["grade"]:
-                    # ציון עודכן
-                    cursor.execute("""
-                        UPDATE grades 
-                        SET grade = ?, notified = 0, detected_at = CURRENT_TIMESTAMP
-                        WHERE user_id = ? AND course_name = ? AND item_name = ?
-                    """, (grade["grade"], user_id, grade["course_name"], grade["item_name"]))
+            save_grades(cursor, user_id, grades)
 
         conn.commit()
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Polled user {user_id} successfully")

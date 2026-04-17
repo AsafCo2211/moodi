@@ -1,5 +1,6 @@
 from datetime import datetime
-
+import re
+import html
 
 def parse_courses(raw_courses: list) -> list:
     active = [
@@ -65,6 +66,46 @@ def parse_grades(raw_grades: list, course_name: str) -> list:
         grades.append({
             "course_name": course_name,
             "item_name": item.get("itemname", ""),
+            "grade": grade_value,
+        })
+
+    return grades
+def strip_html(text: str) -> str:
+    """מסיר תגיות HTML ומפענח HTML entities"""
+    text = re.sub(r'<[^>]+>', '', text)
+    text = html.unescape(text)
+    return text.strip()
+
+def parse_grades_table(tabledata: list, course_name: str) -> list:
+    """
+    מפרסר את טבלת הציונים של gradereport_user_get_grades_table.
+    עובד גם על קורסים עם סוגי ציון מעורבים.
+    """
+    grades = []
+
+    for row in tabledata:
+        if 'itemname' not in row or 'grade' not in row:
+            continue
+
+        name = strip_html(row['itemname'].get('content', ''))
+        grade_raw = strip_html(row['grade'].get('content', ''))
+
+        # מסנן שורות ריקות וציונים חסרים
+        if not name or not grade_raw or grade_raw == '-':
+            continue
+
+        # מנסה להמיר לmמספר
+        try:
+            grade_value = float(grade_raw)
+        except (ValueError, TypeError):
+            continue
+
+        # מנקה את שם הפריט — מסיר prefix כמו "Quiz" או "Assignment"
+        name = re.sub(r'^(Quiz|Assignment|QUIZ|ASSIGNMENT)', '', name).strip()
+
+        grades.append({
+            "course_name": course_name,
+            "item_name": name,
             "grade": grade_value,
         })
 

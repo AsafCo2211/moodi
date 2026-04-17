@@ -54,3 +54,17 @@ def get_grades(wstoken: str, user_id: int, course_id: int) -> list:
         "courseid": course_id
     })
     return result.get("usergrades", [{}])[0].get("gradeitems", [])
+
+def get_grades_table(wstoken: str, user_id: int, course_id: int) -> list:
+    """
+    גרסה חלופית לשליפת ציונים — עובדת גם על קורסים עם סוגי ציון מעורבים.
+    מחזירה את טבלת הציונים כ-HTML מפורמט.
+    """
+    result = call_moodle(wstoken, "gradereport_user_get_grades_table", {
+        "userid": user_id,
+        "courseid": course_id
+    })
+    tables = result.get("tables", [])
+    if not tables:
+        return []
+    return tables[0].get("tabledata", [])
