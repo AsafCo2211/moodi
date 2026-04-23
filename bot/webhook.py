@@ -29,6 +29,7 @@ async def receive_message(request: Request):
     אנחנו מוציאים את המידע הרלוונטי ומעבירים לתפריט.
     """
     body = await request.json()
+    print("WEBHOOK BODY:", body)
 
     try:
         entry = body["entry"][0]
@@ -50,10 +51,20 @@ async def receive_message(request: Request):
 
         # לחיצה על כפתור
         elif msg_type == "interactive":
-            button_id = message["interactive"]["button_reply"]["id"]
-            await handle_message(from_number, "button", button_id)
+            interactive = message["interactive"]
+            interactive_type = interactive.get("type")
+            
+            if interactive_type == "button_reply":
+                button_id = interactive["button_reply"]["id"]
+                await handle_message(from_number, "button", button_id)
+            
+            elif interactive_type == "list_reply":
+                list_id = interactive["list_reply"]["id"]
+                await handle_message(from_number, "list", list_id)
 
-    except (KeyError, IndexError):
-        pass
+    except Exception as e:
+        print("ERROR:", e)
+        import traceback
+        traceback.print_exc()
 
     return {"status": "ok"}

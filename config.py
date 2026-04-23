@@ -17,3 +17,6 @@ ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 
 # DB
 DATABASE_URL = os.getenv("DATABASE_URL", "moodi.db")
+
+# Gemini
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")

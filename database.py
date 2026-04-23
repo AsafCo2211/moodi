@@ -58,6 +58,12 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id),
             UNIQUE(user_id, course_id)
         );
+                         
+        CREATE TABLE IF NOT EXISTS courses_cache (
+            moodle_course_id INTEGER PRIMARY KEY,
+            full_name TEXT NOT NULL,
+            short_name TEXT NOT NULL
+        );
     """)
 
     conn.commit()
