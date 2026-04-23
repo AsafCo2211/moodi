@@ -105,6 +105,10 @@ async def handle_message(from_number: str, msg_type: str, content: str):
             send_main_menu(from_number, name)
         elif content == "menu_other":
             send_text(from_number, f"{RLM}במה אוכל לעזור? שלח לי הודעה חופשית 💬")
+        elif content.startswith("show_all_"):
+            key = content.replace("show_all_", "")
+            cid = None if key == "all" else int(key)
+            await show_assignments(from_number, user["id"], cid, user=user, full_view=True)
 
     elif msg_type == "list":
         if content == "menu_assignments":
@@ -118,10 +122,10 @@ async def handle_message(from_number: str, msg_type: str, content: str):
         elif content == "back_main":
             send_main_menu(from_number, name)
         elif content == "course_all":
-            await show_assignments(from_number, user["id"], None)
+            await show_assignments(from_number, user["id"], None, user=user)
         elif content.startswith("course_"):
             course_id = int(content.replace("course_", ""))
-            await show_assignments(from_number, user["id"], course_id)
+            await show_assignments(from_number, user["id"], course_id, user=user)
 
 
 def send_main_menu(to: str, name: str):
@@ -151,10 +155,10 @@ async def show_course_selection(to: str, user_id: int):
         SELECT 1 FROM assignments a
         WHERE a.user_id = uc.user_id
         AND a.course_name = uc.course_name
-        AND (a.due_date IS NULL OR a.due_date > ?)
+        AND a.is_submitted = 0
     )
     ORDER BY uc.added_at DESC
-""", (user_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))).fetchall()
+""", (user_id,)).fetchall()
     conn.close()
 
     if not courses:
@@ -162,13 +166,14 @@ async def show_course_selection(to: str, user_id: int):
         send_main_menu(to, "אסף")
         return
 
-    rows = [{"id": "course_all", "title": "📋 כל הקורסים"}]
+    rows = []
     for c in courses[:9]:
         short = get_short_name(c["course_id"], c["course_name"].strip())
         rows.append({
             "id": f"course_{c['course_id']}",
             "title": short
         })
+    rows.append({"id": "course_all", "title": "📋 כל הקורסים"})
 
     send_list(
         to=to,
@@ -178,53 +183,145 @@ async def show_course_selection(to: str, user_id: int):
     )
 
 
-async def show_assignments(to: str, user_id: int, course_id):
-    """מציג מטלות — כל הקורסים או קורס ספציפי"""
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+async def show_assignments(to: str, user_id: int, course_id, user=None, full_view: bool = False):
+    name = get_first_name(user) if user else ""
     conn = get_connection()
 
     if course_id is None:
-        assignments = conn.execute("""
+        rows = conn.execute("""
             SELECT course_name, assignment_name, due_date
             FROM assignments
             WHERE user_id = ?
-            AND (due_date IS NULL OR due_date > ?)
-            ORDER BY 
-                CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
+              AND is_submitted = 0
+            ORDER BY
+                CASE WHEN due_date IS NULL THEN 1 ELSE 0 END ASC,
                 due_date ASC
-        """, (user_id, now)).fetchall()
+        """, (user_id,)).fetchall()
+        course_header = None
     else:
-        course_name = conn.execute(
+        course_name_row = conn.execute(
             "SELECT course_name FROM user_courses WHERE course_id = ? AND user_id = ?",
             (course_id, user_id)
-        ).fetchone()["course_name"]
-
-        assignments = conn.execute("""
+        ).fetchone()
+        course_header = course_name_row["course_name"]
+        rows = conn.execute("""
             SELECT course_name, assignment_name, due_date
             FROM assignments
             WHERE user_id = ?
-            AND course_name = ?
-            AND (due_date IS NULL OR due_date > ?)
+              AND course_name = ?
+              AND is_submitted = 0
             ORDER BY
-                CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
+                CASE WHEN due_date IS NULL THEN 1 ELSE 0 END ASC,
                 due_date ASC
-        """, (user_id, course_name, now)).fetchall()
+        """, (user_id, course_header)).fetchall()
     conn.close()
 
-    if not assignments:
-        send_text(to, f"{RLM}🎉 אין מטלות פתוחות!")
-        send_main_menu(to, "אסף")
+    # Categorise by date (not by seconds)
+    today = datetime.now().date()
+    red, yellow, green, white, overdue = [], [], [], [], []
+    for a in rows:
+        if not a["due_date"]:
+            white.append(a)
+            continue
+        due_date_obj = datetime.strptime(a["due_date"], '%Y-%m-%d %H:%M:%S').date()
+        if due_date_obj < today:
+            overdue.append(a)
+        elif due_date_obj == today:
+            red.append(a)
+        elif (due_date_obj - today).days <= 3:
+            yellow.append(a)
+        else:
+            green.append(a)
+
+    # Pair each assignment with its display emoji
+    open_items = (
+        [(a, "🔴") for a in red] +
+        [(a, "🟡") for a in yellow] +
+        [(a, "🟢") for a in green] +
+        [(a, "⚪") for a in white]
+    )
+    overdue_items = [(a, "❗️") for a in overdue]
+
+    if not open_items and not overdue_items:
+        send_text(to, f"{RLM}{name}, סיימת הכל! 🎉 אין מטלות פתוחות כרגע.")
+        send_main_menu(to, name)
         return
 
-    message = f"{RLM}📋 *המטלות הפתוחות שלך:*\n\n"
-    for a in assignments:
-        message += format_assignment(a)
-    message += f"{RLM}• - - - - - - - - - - - - - - - - - - - - •"
+    include_course = course_id is None
+
+    def fmt_date(due_str):
+        due = datetime.strptime(due_str, '%Y-%m-%d %H:%M:%S')
+        diff_days = (due.date() - datetime.now().date()).days
+        if diff_days == 0:
+            return f"היום | {due.strftime('%H:%M')}"
+        elif diff_days == 1:
+            return f"מחר | {due.strftime('%H:%M')}"
+        else:
+            return f"{due.strftime('%d/%m/%y')} | {due.strftime('%H:%M')}"
+
+    def fmt_block(a, emoji):
+        date_part = fmt_date(a["due_date"]) if a["due_date"] else "ללא תאריך"
+        SEP = f"{RLM}• - - - - - - - - - - - - - - - - - - - - •\n"
+        if include_course:
+            return (
+                SEP +
+                f"{RLM}📖 *{a['course_name'].strip()}*\n\n"
+                f"{RLM}📋 *מטלה*: {a['assignment_name'].strip()}\n\n"
+                f"{RLM}{emoji} *מועד הגשה*: {date_part}\n"
+            )
+        else:
+            return (
+                SEP +
+                f"{RLM}📋 *מטלה*: {a['assignment_name'].strip()}\n\n"
+                f"{RLM}{emoji} *מועד הגשה*: {date_part}\n"
+            )
+
+    # Header
+    message = f"{RLM}📋 *המטלות הפתוחות שלך:*\n"
+    if course_header:
+        message += f"{RLM}📖 *{course_header.strip()}*\n"
+    message += "\n"
+
+    if full_view:
+        for a, emoji in open_items:
+            message += fmt_block(a, emoji)
+        message += f"{RLM}• - - - - - - - - - - - - - - - - - - - - •\n"
+    else:
+        top3 = open_items[:3]
+        rest = open_items[3:]
+
+        for a, emoji in top3:
+            message += fmt_block(a, emoji)
+        message += f"{RLM}• - - - - - - - - - - - - - - - - - - - - •\n"
+
+        if rest:
+            rest_counts = {"🔴": 0, "🟡": 0, "🟢": 0, "⚪": 0}
+            for _, emoji in rest:
+                rest_counts[emoji] += 1
+            message += "\n"
+            for emoji in ("🔴", "🟡", "🟢", "⚪"):
+                if rest_counts[emoji]:
+                    message += f"{RLM}{emoji} {rest_counts[emoji]} מטלות נוספות\n"
+            message += "\n"
+
+        if overdue_items:
+            message += f"\n{RLM}⚠️ *פספסת להגיש* ⚠️\n"
+            for a, emoji in overdue_items:
+                message += fmt_block(a, emoji)
+            message += f"{RLM}• - - - - - - - - - - - - - - - - - - - - •\n"
 
     send_text(to, message)
-    send_buttons(to, f"{RLM}מה תרצה לעשות?", [
-        {"id": "back_main", "title": "⬅️ תפריט ראשי"},
-    ])
+
+    if full_view or len(open_items) <= 3:
+        send_buttons(to, f"{RLM}מה תרצה לעשות?", [
+            {"id": "back_main", "title": "⬅️ תפריט ראשי"},
+        ])
+    else:
+        course_key = str(course_id) if course_id is not None else "all"
+        send_buttons(to, f"{RLM}מה תרצה לעשות?", [
+            {"id": f"show_all_{course_key}", "title": "📋 הצג את כל המטלות"},
+            {"id": "back_main",              "title": "⬅️ תפריט ראשי"},
+        ])
 
 
 async def show_grades(to: str, user_id: int):
