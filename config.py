@@ -20,3 +20,6 @@ DATABASE_URL = os.getenv("DATABASE_URL", "moodi.db")
 
 # Gemini
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Scheduler
+POLLING_ENABLED = os.getenv("POLLING_ENABLED", "true").lower() == "true"

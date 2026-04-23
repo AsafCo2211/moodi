@@ -16,7 +16,9 @@ def get_user(phone_number: str):
 
 
 def get_first_name(user) -> str:
-    return "אסף"
+    if user and user["first_name"]:
+        return user["first_name"]
+    return ""
 
 
 def assignment_emoji(due_date_str: str) -> str:

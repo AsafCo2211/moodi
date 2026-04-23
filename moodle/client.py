@@ -55,6 +55,21 @@ def get_grades(wstoken: str, user_id: int, course_id: int) -> list:
     })
     return result.get("usergrades", [{}])[0].get("gradeitems", [])
 
+def get_submission_status(wstoken: str, assign_id: int) -> str:
+    """
+    Returns submission status for a single assignment.
+    Returns: "submitted", "draft", or "new"
+    """
+    try:
+        result = call_moodle(wstoken, "mod_assign_get_submission_status", {
+            "assignid": assign_id
+        })
+        submission = result.get("lastattempt", {}).get("submission", {})
+        return submission.get("status", "new")
+    except Exception:
+        return "new"
+
+
 def get_grades_table(wstoken: str, user_id: int, course_id: int) -> list:
     """
     גרסה חלופית לשליפת ציונים — עובדת גם על קורסים עם סוגי ציון מעורבים.

@@ -53,11 +53,11 @@ async def receive_message(request: Request):
         elif msg_type == "interactive":
             interactive = message["interactive"]
             interactive_type = interactive.get("type")
-            
+
             if interactive_type == "button_reply":
                 button_id = interactive["button_reply"]["id"]
                 await handle_message(from_number, "button", button_id)
-            
+
             elif interactive_type == "list_reply":
                 list_id = interactive["list_reply"]["id"]
                 await handle_message(from_number, "list", list_id)

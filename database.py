@@ -67,6 +67,13 @@ def init_db():
     """)
 
     conn.commit()
+
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN first_name TEXT")
+        conn.commit()
+    except Exception:
+        pass  # column already exists
+
     conn.close()
     print("Database initialized successfully")
 

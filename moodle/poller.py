@@ -5,6 +5,43 @@ from moodle.client import get_assignments, get_grades, get_grades_table
 from moodle.parser import parse_assignments, parse_grades, parse_grades_table
 
 
+def seed_user_courses_if_empty(cursor, user_id: int, wstoken: str, moodle_user_id: int):
+    """If user has no courses in user_courses, fetch from Moodle and insert."""
+    count = cursor.execute(
+        "SELECT COUNT(*) FROM user_courses WHERE user_id = ?", (user_id,)
+    ).fetchone()[0]
+
+    if count > 0:
+        return
+
+    from moodle.client import get_user_courses
+    from moodle.parser import parse_courses
+
+    raw = get_user_courses(wstoken, moodle_user_id)
+    courses = parse_courses(raw)
+
+    for c in courses:
+        cursor.execute("""
+            INSERT OR IGNORE INTO user_courses (user_id, course_id, course_name)
+            VALUES (?, ?, ?)
+        """, (user_id, c["id"], c["name"]))
+
+    print(f"[seed] Inserted {len(courses)} courses for user {user_id}")
+
+    from moodle.client import call_moodle
+    try:
+        site_info = call_moodle(wstoken, 'core_webservice_get_site_info', {})
+        full_name = site_info.get('fullname', '')
+        first_name = full_name.split()[0] if full_name else ''
+        cursor.execute(
+            "UPDATE users SET first_name = ? WHERE id = ?",
+            (first_name, user_id)
+        )
+        print(f"  [seed] Saved name: {first_name}")
+    except Exception:
+        pass
+
+
 def save_grades(cursor, user_id: int, grades: list):
     """שומר ציונים ל-DB, מזהה ציונים חדשים ועדכונים."""
     for grade in grades:
@@ -27,6 +64,31 @@ def save_grades(cursor, user_id: int, grades: list):
             """, (grade["grade"], user_id, grade["course_name"], grade["item_name"]))
 
 
+def sync_submission_statuses(cursor, user_id: int, wstoken: str):
+    """
+    Checks and updates submission status for all unsubmitted assignments
+    whose due_date has passed. Called only from the 5-minute scheduler cycle.
+    """
+    from moodle.client import get_submission_status
+
+    overdue = cursor.execute("""
+        SELECT moodle_assign_id FROM assignments
+        WHERE user_id = ?
+        AND is_submitted = 0
+    """, (user_id,)).fetchall()
+
+    print(f"  → Checking submission status for {len(overdue)} unsubmitted assignments")
+
+    for row in overdue:
+        status = get_submission_status(wstoken, row["moodle_assign_id"])
+        if status == "submitted":
+            cursor.execute("""
+                UPDATE assignments SET is_submitted = 1
+                WHERE user_id = ? AND moodle_assign_id = ?
+            """, (user_id, row["moodle_assign_id"]))
+            print(f"  [submit] Marked assign {row['moodle_assign_id']} as submitted")
+
+
 def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list, course_map: dict):
     """
     סורק מטלות וציונים עבור משתמש אחד.
@@ -36,9 +98,20 @@ def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list,
     cursor = conn.cursor()
 
     try:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Polling user {user_id} — {len(course_ids)} courses")
+        seed_user_courses_if_empty(cursor, user_id, wstoken, moodle_user_id)
+        conn.commit()
+        if not course_ids:
+            rows = cursor.execute(
+                "SELECT course_id, course_name FROM user_courses WHERE user_id = ?", (user_id,)
+            ).fetchall()
+            course_ids = [r["course_id"] for r in rows]
+            course_map = {r["course_id"]: r["course_name"] for r in rows}
+
         # --- מטלות ---
         raw_assignments = get_assignments(wstoken, course_ids)
         assignments = parse_assignments(raw_assignments)
+        print(f"  → {len(assignments)} assignments fetched")
 
         for assign in assignments:
             try:
@@ -77,8 +150,10 @@ def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list,
                     print(f"  Skipping grades for {course_name}: {e}")
                     continue
 
+            print(f"  → {course_name}: {len(grades)} grades")
             save_grades(cursor, user_id, grades)
 
+        sync_submission_statuses(cursor, user_id, wstoken)
         conn.commit()
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Polled user {user_id} successfully")
 
@@ -95,8 +170,22 @@ def poll_all_users():
     סורק את כל המשתמשים הפעילים במערכת.
     זו הפונקציה שה-Cron job יקרא לה כל 5 דקות.
     """
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Starting scheduled poll for all users")
     conn = get_connection()
     cursor = conn.cursor()
+
+    # Seed courses for active users who have none yet
+    users_to_seed = cursor.execute("""
+        SELECT id, wstoken, moodle_user_id FROM users
+        WHERE is_active = 1 AND wstoken IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM user_courses WHERE user_id = users.id)
+    """).fetchall()
+
+    for u in users_to_seed:
+        seed_user_courses_if_empty(cursor, u["id"], u["wstoken"], u["moodle_user_id"])
+
+    if users_to_seed:
+        conn.commit()
 
     users = cursor.execute("""
         SELECT u.id, u.wstoken, u.moodle_user_id,
@@ -130,3 +219,47 @@ def poll_all_users():
             course_ids=data["course_ids"],
             course_map=data["course_map"]
         )
+
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Scheduled poll complete")
+
+
+def poll_user_on_demand(user_id: int):
+    """
+    Polls a single user immediately.
+    Called as a background task when a user sends a message.
+    Fetches their courses from user_courses table and polls assignments + grades.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    user = cursor.execute(
+        "SELECT id, wstoken, moodle_user_id FROM users "
+        "WHERE id = ? AND is_active = 1 AND wstoken IS NOT NULL",
+        (user_id,)
+    ).fetchone()
+
+    if not user:
+        conn.close()
+        return
+
+    seed_user_courses_if_empty(cursor, user["id"], user["wstoken"], user["moodle_user_id"])
+    conn.commit()
+
+    rows = cursor.execute("""
+        SELECT u.id, u.wstoken, u.moodle_user_id,
+               uc.course_id, uc.course_name
+        FROM users u
+        JOIN user_courses uc ON u.id = uc.user_id
+        WHERE u.id = ? AND u.is_active = 1 AND u.wstoken IS NOT NULL
+    """, (user_id,)).fetchall()
+    conn.close()
+
+    if not rows:
+        return
+
+    course_ids = [r["course_id"] for r in rows]
+    course_map = {r["course_id"]: r["course_name"] for r in rows}
+    wstoken = rows[0]["wstoken"]
+    moodle_user_id = rows[0]["moodle_user_id"]
+
+    poll_user(user_id, moodle_user_id, wstoken, course_ids, course_map)
