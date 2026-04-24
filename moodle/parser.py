@@ -76,6 +76,13 @@ def strip_html(text: str) -> str:
     text = html.unescape(text)
     return text.strip()
 
+def extract_item_name(content: str) -> str:
+    match = re.search(r'<a[^>]*>([^<]+)</a>', content)
+    if match:
+        return html.unescape(match.group(1)).strip()
+    return strip_html(content)
+
+
 def parse_grades_table(tabledata: list, course_name: str) -> list:
     """
     מפרסר את טבלת הציונים של gradereport_user_get_grades_table.
@@ -87,26 +94,22 @@ def parse_grades_table(tabledata: list, course_name: str) -> list:
         if 'itemname' not in row or 'grade' not in row:
             continue
 
-        name = strip_html(row['itemname'].get('content', ''))
+        name = extract_item_name(row['itemname'].get('content', ''))
         grade_raw = strip_html(row['grade'].get('content', ''))
 
-        # מסנן שורות ריקות וציונים חסרים
         if not name or not grade_raw or grade_raw == '-':
             continue
 
-        # מנסה להמיר לmמספר
         try:
             grade_value = float(grade_raw)
         except (ValueError, TypeError):
             continue
 
-        # מנקה את שם הפריט — מסיר prefix כמו "Quiz" או "Assignment"
-        name = re.sub(r'^(Quiz|Assignment|QUIZ|ASSIGNMENT)', '', name).strip()
-
         grades.append({
             "course_name": course_name,
             "item_name": name,
             "grade": grade_value,
+            "grade_range": strip_html(row.get('range', {}).get('content', '')),
         })
 
     return grades

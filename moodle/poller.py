@@ -1,8 +1,8 @@
 import sqlite3
 from datetime import datetime
 from database import get_connection
-from moodle.client import get_assignments, get_grades, get_grades_table
-from moodle.parser import parse_assignments, parse_grades, parse_grades_table
+from moodle.client import get_assignments, get_grades_table
+from moodle.parser import parse_assignments, parse_grades_table
 
 
 def seed_user_courses_if_empty(cursor, user_id: int, wstoken: str, moodle_user_id: int):
@@ -52,16 +52,16 @@ def save_grades(cursor, user_id: int, grades: list):
 
         if existing is None:
             cursor.execute("""
-                INSERT INTO grades (user_id, course_name, item_name, grade)
-                VALUES (?, ?, ?, ?)
-            """, (user_id, grade["course_name"], grade["item_name"], grade["grade"]))
+                INSERT INTO grades (user_id, course_name, item_name, grade, grade_range)
+                VALUES (?, ?, ?, ?, ?)
+            """, (user_id, grade["course_name"], grade["item_name"], grade["grade"], grade.get("grade_range", "")))
 
         elif existing["grade"] != grade["grade"]:
             cursor.execute("""
-                UPDATE grades 
-                SET grade = ?, notified = 0, detected_at = CURRENT_TIMESTAMP
+                UPDATE grades
+                SET grade = ?, grade_range = ?, notified = 0, detected_at = CURRENT_TIMESTAMP
                 WHERE user_id = ? AND course_name = ? AND item_name = ?
-            """, (grade["grade"], user_id, grade["course_name"], grade["item_name"]))
+            """, (grade["grade"], grade.get("grade_range", ""), user_id, grade["course_name"], grade["item_name"]))
 
 
 def sync_submission_statuses(cursor, user_id: int, wstoken: str):
@@ -132,26 +132,14 @@ def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list,
         # --- ציונים ---
         for course_id in course_ids:
             course_name = course_map.get(course_id, "")
-            grades = []
-
-            # ניסיון ראשון — API סטנדרטי
             try:
-                raw_grades = get_grades(wstoken, moodle_user_id, course_id)
-                grades = parse_grades(raw_grades, course_name)
-            except Exception:
-                pass
-
-            # אם לא קיבלנו ציונים — fallback לגרסה החלופית
-            if not grades:
-                try:
-                    raw_table = get_grades_table(wstoken, moodle_user_id, course_id)
-                    grades = parse_grades_table(raw_table, course_name)
-                except Exception as e:
-                    print(f"  Skipping grades for {course_name}: {e}")
-                    continue
-
-            print(f"  → {course_name}: {len(grades)} grades")
-            save_grades(cursor, user_id, grades)
+                raw_table = get_grades_table(wstoken, moodle_user_id, course_id)
+                grades = parse_grades_table(raw_table, course_name)
+                save_grades(cursor, user_id, grades)
+                print(f"  → {course_name[:30]}: {len(grades)} grades")
+            except Exception as e:
+                print(f"  Skipping grades for {course_name}: {e}")
+                continue
 
         sync_submission_statuses(cursor, user_id, wstoken)
         conn.commit()

@@ -74,6 +74,12 @@ def init_db():
     except Exception:
         pass  # column already exists
 
+    try:
+        cursor.execute("ALTER TABLE grades ADD COLUMN grade_range TEXT")
+        conn.commit()
+    except Exception:
+        pass  # column already exists
+
     conn.close()
     print("Database initialized successfully")
 
