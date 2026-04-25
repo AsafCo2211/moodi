@@ -4,3 +4,4 @@ moodi.db
 .env
 __pycache__/
 *.pyc
+__pycache__/
