@@ -89,7 +89,7 @@ def sync_submission_statuses(cursor, user_id: int, wstoken: str):
             print(f"  [submit] Marked assign {row['moodle_assign_id']} as submitted")
 
 
-def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list, course_map: dict):
+def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list, course_map: dict, phone_number: str = ""):
     """
     סורק מטלות וציונים עבור משתמש אחד.
     course_map: {course_id: course_name}
@@ -145,6 +145,13 @@ def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list,
         conn.commit()
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Polled user {user_id} successfully")
 
+        try:
+            from notifications.engine import send_new_assignment_notifications, send_new_grade_notifications
+            send_new_assignment_notifications(user_id, phone_number)
+            send_new_grade_notifications(user_id, phone_number)
+        except Exception as e:
+            print(f"[notifications] Error sending notifications for user {user_id}: {e}")
+
     except Exception as e:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Error polling user {user_id}: {e}")
         conn.rollback()
@@ -176,7 +183,7 @@ def poll_all_users():
         conn.commit()
 
     users = cursor.execute("""
-        SELECT u.id, u.wstoken, u.moodle_user_id,
+        SELECT u.id, u.wstoken, u.moodle_user_id, u.phone_number,
                uc.course_id, uc.course_name
         FROM users u
         JOIN user_courses uc ON u.id = uc.user_id
@@ -193,6 +200,7 @@ def poll_all_users():
             user_data[uid] = {
                 "wstoken": row["wstoken"],
                 "moodle_user_id": row["moodle_user_id"],
+                "phone_number": row["phone_number"],
                 "course_ids": [],
                 "course_map": {}
             }
@@ -205,7 +213,8 @@ def poll_all_users():
             moodle_user_id=data["moodle_user_id"],
             wstoken=data["wstoken"],
             course_ids=data["course_ids"],
-            course_map=data["course_map"]
+            course_map=data["course_map"],
+            phone_number=data["phone_number"]
         )
 
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Scheduled poll complete")
@@ -221,7 +230,7 @@ def poll_user_on_demand(user_id: int):
     cursor = conn.cursor()
 
     user = cursor.execute(
-        "SELECT id, wstoken, moodle_user_id FROM users "
+        "SELECT id, wstoken, moodle_user_id, phone_number FROM users "
         "WHERE id = ? AND is_active = 1 AND wstoken IS NOT NULL",
         (user_id,)
     ).fetchone()
@@ -249,5 +258,6 @@ def poll_user_on_demand(user_id: int):
     course_map = {r["course_id"]: r["course_name"] for r in rows}
     wstoken = rows[0]["wstoken"]
     moodle_user_id = rows[0]["moodle_user_id"]
+    phone_number = user["phone_number"]
 
-    poll_user(user_id, moodle_user_id, wstoken, course_ids, course_map)
+    poll_user(user_id, moodle_user_id, wstoken, course_ids, course_map, phone_number)
