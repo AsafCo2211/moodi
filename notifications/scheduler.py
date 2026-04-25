@@ -11,7 +11,7 @@ def start_scheduler():
         print("Polling disabled — scheduler not started")
         return
 
-    scheduler.add_job(poll_all_users, "interval", minutes=5)
+    scheduler.add_job(poll_all_users, "cron", hour="7-23", minute="*/5")
     scheduler.add_job(send_morning_summary, "cron", hour=10, minute=00)
     scheduler.add_job(send_evening_reminder, "cron", hour=20, minute=0)
     scheduler.add_job(reset_daily_flags, "cron", hour=1, minute=0)
