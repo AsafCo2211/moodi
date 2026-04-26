@@ -22,6 +22,29 @@ uvicorn main:app --reload
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
+## Production Deployment
+
+Server: Oracle Cloud VPS — ubuntu@130.61.50.239
+SSH: ssh -i ~/Documents/Projects/ai-content-factory/ssh-key-202*-20.key ubuntu@130.61.50.239
+
+To deploy updates:
+1. git push origin main  (from local Mac)
+2. SSH into server
+3. cd ~/moodi && git fetch && git diff HEAD origin/main  (review changes)
+4. git pull && sudo systemctl restart moodi
+
+Services:
+- moodi.service — uvicorn FastAPI app on port 8000
+- cloudflared.service — Cloudflare Tunnel → https://moodi.aitoolhub.blog
+
+Server-only files (not in git):
+- /home/ubuntu/moodi/.env
+- /etc/cloudflared/config.yml
+- /etc/systemd/system/moodi.service
+- /etc/systemd/system/cloudflared.service
+
+View logs: sudo journalctl -u moodi -f
+
 ## Required Environment Variables
 
 Create a `.env` file with:
@@ -52,8 +75,8 @@ moodle/
   poller.py              poll_all_users() — fetches assignments/grades for all active users
 
 notifications/
-  engine.py              (stub) Notification dispatch logic
-  scheduler.py           APScheduler, polls every 5 min via POLLING_ENABLED flag
+  engine.py              Notification dispatch: new assignments, new grades, morning summary, evening reminder, daily flag reset
+  scheduler.py           APScheduler — polls 07:00-23:59 every 5 min, morning summary at 10:00, evening reminder at 20:00, flag reset at 01:00
 
 auth/
   webview.py             (stub) Auth webview for token acquisition

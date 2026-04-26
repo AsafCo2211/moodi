@@ -1,11 +1,11 @@
 # מוודי — סטטוס פיתוח
-_עודכן: אפריל 2026 | Branch פעיל: `feature/grades-flow`_
+_עודכן: אפריל 2026_
 
 ---
 
 ## 1. מה זה מוודי
 
-בוט WhatsApp לסטודנטים באוניברסיטת בן-גוריון. מתחבר למודל (Moodle BGU) דרך ה-Web Services API ומאפשר לסטודנט לראות את המטלות, הציונים והמועדים שלו בלי להיכנס לאתר. הבוט סורק את מודל כל 5 דקות ועתידו לשלוח התראות פרואקטיביות על ציונים חדשים ומועדי הגשה קרובים.
+בוט WhatsApp לסטודנטים באוניברסיטת בן-גוריון. מתחבר למודל (Moodle BGU) דרך ה-Web Services API ומאפשר לסטודנט לראות את המטלות, הציונים והמועדים שלו בלי להיכנס לאתר. הבוט סורק את מודל כל 5 דקות, שולח התראות פרואקטיביות על ציונים חדשים ומטלות חדשות, ורץ על שרת פרודקשן 24/7.
 
 ---
 
@@ -14,7 +14,7 @@ _עודכן: אפריל 2026 | Branch פעיל: `feature/grades-flow`_
 **Stack:**
 - Python 3.14, FastAPI + Uvicorn
 - SQLite (קובץ `moodi.db`)
-- APScheduler `BackgroundScheduler` (polling כל 5 דקות)
+- APScheduler `BackgroundScheduler` (polling כל 5 דקות בין 07:00-23:59)
 - Meta WhatsApp Cloud API v25.0
 - Moodle Web Services REST API (BGU: `moodle.bgu.ac.il/moodle`)
 - Google Gemini API (קיצור שמות קורסים)
@@ -32,8 +32,8 @@ _עודכן: אפריל 2026 | Branch פעיל: `feature/grades-flow`_
 | `moodle/client.py` | `call_moodle()` + wrappers לכל פונקציית API |
 | `moodle/parser.py` | המרת תגובות גולמיות מ-Moodle ל-dicts נקיים |
 | `moodle/poller.py` | מנוע ה-polling — seeding, שמירת מטלות/ציונים, sync סטטוס הגשות |
-| `notifications/scheduler.py` | APScheduler — מפעיל `poll_all_users()` כל 5 דקות |
-| `notifications/engine.py` | **ריק** — מיועד לשליחת התראות פרואקטיביות |
+| `notifications/scheduler.py` | APScheduler — polling כל 5 דקות בין 07:00-23:59, סיכום בוקר 10:00, תזכורת ערב 20:00, איפוס flags 01:00 |
+| `notifications/engine.py` | מנוע התראות — התראות על ציונים חדשים, מטלות חדשות, סיכום בוקר וערב |
 | `utils/course_namer.py` | קיצור שם קורס דרך Gemini, עם cache בטבלת `courses_cache` |
 | `auth/webview.py` | **ריק** — מיועד לתהליך ההרשמה |
 | `auth/token_store.py` | **ריק** — מיועד לאחסון מוצפן של wstoken |
@@ -84,40 +84,48 @@ _עודכן: אפריל 2026 | Branch פעיל: `feature/grades-flow`_
 - ✅ זיהוי ציון חדש (INSERT) vs עדכון ציון (UPDATE + notified=0)
 - ✅ sync סטטוס הגשות — כל מטלה לא מוגשת נבדקת דרך `mod_assign_get_submission_status`
 
+### התראות
+- ✅ התראה מיידית על מטלה חדשה (notified_new)
+- ✅ התראה מיידית על ציון חדש/מעודכן (notified)
+- ✅ סיכום בוקר יומי בשעה 10:00 (מטלות להגשה היום)
+- ✅ תזכורת ערב בשעה 20:00 (מטלות שלא הוגשו)
+- ✅ איפוס flags יומי בשעה 01:00
+- ✅ polling מוגבל לשעות 07:00-23:59 למניעת חסימות Moodle
+
+### תשתית פרודקשן
+- ✅ שרת Oracle Cloud VPS רץ 24/7 (IP: 130.61.50.239)
+- ✅ Cloudflare Tunnel עם כתובת קבועה: moodi.aitoolhub.blog
+- ✅ systemd services: moodi + cloudflared (מופעלים אוטומטית עם השרת)
+- ✅ WhatsApp System User Token קבוע (לא מתאפס)
+- ✅ Webhook URL קבוע: https://moodi.aitoolhub.blog/webhook
+- ✅ שעון שרת: Asia/Jerusalem (IDT)
+
 ---
 
 ## 4. מה חסר — לפי סדר עדיפויות
 
 ### 🔴 קריטי
 
-**1. מנוע התראות (`notifications/engine.py` — ריק)**
-הפולר כבר מזהה ציונים חדשים (`notified=0`) ומטלות חדשות (`notified_new=0`) — אין מי שישלח אותן. זה הערך המרכזי של המוצר.
-- צריך: פונקציה `send_pending_notifications(user_id)` שנקראת אחרי כל `poll_user()`
-- ציון חדש: `grades WHERE notified=0` → שלח הודעה → `notified=1`
-- מטלה חדשה: `assignments WHERE notified_new=0` → שלח הודעה → `notified_new=1`
-- מועד הגשה היום (בוקר): `assignments WHERE notified_today=0 AND due_date=today`
-- מועד הגשה ערב: `assignments WHERE notified_evening=0 AND due_date=tomorrow`
-
-**2. תהליך הרשמה (`auth/webview.py`, `auth/token_store.py` — ריקים)**
+**1. תהליך הרשמה (`auth/webview.py`, `auth/token_store.py` — ריקים)**
 כרגע אין דרך לרשום משתמש חדש. wstoken צריך להיות מוכנס ידנית ל-DB. בלי זה אי אפשר להרחיב מעבר למשתמש מפתח אחד.
 
 ### 🟡 חשוב
 
-**3. בדיקת תפוגת wstoken**
+**2. בדיקת תפוגת wstoken**
 עמודת `token_expires_at` קיימת בסכמה אבל לעולם לא נבדקת. אם טוקן פג תוקף, הפולר נכשל בשקט.
 
-**4. משוב שגיאות למשתמש**
+**3. משוב שגיאות למשתמש**
 כשמודל API נכשל, הפולר מדפיס לקונסול אבל המשתמש לא מקבל הודעה.
 
-**5. `send_main_menu` ב-`sender.py` — dead code**
+**4. `send_main_menu` ב-`sender.py` — dead code**
 `sender.py` מכיל `send_main_menu()` שמשתמשת ב-`send_buttons` (3 כפתורים). `menu.py` מגדירה `send_main_menu()` משלה עם `send_list` (4 אפשרויות). הגרסה ב-`sender.py` לא נקראת לעולם — צריך למחוק.
 
 ### 🟢 שיפורים
 
-**6. הצפנת wstoken**
+**5. הצפנת wstoken**
 `cryptography` כבר ב-`requirements.txt` אבל `auth/token_store.py` ריק. wstoken נשמר plain text ב-DB.
 
-**7. לוגינג**
+**6. לוגינג**
 כל ה-logging דרך `print()`. מומלץ לעבור ל-`logging` standard library עם רמות וconfiguration.
 
 ---
@@ -150,17 +158,19 @@ _עודכן: אפריל 2026 | Branch פעיל: `feature/grades-flow`_
 
 ## 7. הצעדים הבאים
 
-### שלב א׳ — התראות (highest ROI)
-1. מימוש `notifications/engine.py`:
-   - `send_grade_notifications(user_id)` — שולח הודעה WhatsApp על כל ציון עם `notified=0`, מעדכן ל-`notified=1`
-   - `send_assignment_notifications(user_id)` — מטלות חדשות + ריענון יומי ובוקר
-2. חיבור לסוף `poll_user()` ב-`moodle/poller.py`
+### שלב א׳ — הרשמה (עדיפות ראשונה)
+1. מימוש תהליך רישום משתמש חדש ב-auth/webview.py ו-auth/token_store.py
+2. הצפנת wstoken ב-DB דרך cryptography
 
-### שלב ב׳ — הרשמה
-3. מימוש תהליך רישום משתמש — קבלת פרטים → wstoken → שמירה
-4. הצפנת wstoken ב-DB דרך `auth/token_store.py` עם `cryptography`
+### שלב ב׳ — מספר WhatsApp אמיתי
+3. רכישת SIM ייעודי למוודי
+4. רישום מספר אמיתי ב-Meta Business Manager
 
-### שלב ג׳ — ניקיון
-5. מחיקת `send_main_menu` המת מ-`sender.py`
-6. בדיקת תפוגת טוקן לפני כל poll
-7. מעבר מ-`print` ל-`logging`
+### שלב ג׳ — Cloudflare Named Tunnel קבוע
+5. הרשמה לחשבון Cloudflare אמיתי עם Named Tunnel
+   (כרגע הטונל פועל אבל ה-token עלול להשתנות אם cloudflared יתאפס)
+
+### שלב ד׳ — ניקיון
+6. מחיקת send_main_menu המת מ-sender.py
+7. בדיקת תפוגת wstoken לפני כל poll
+8. מעבר מ-print ל-logging
