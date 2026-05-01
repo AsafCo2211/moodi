@@ -205,11 +205,13 @@ async def show_course_selection(to: str, user_id: int):
     )
     ORDER BY uc.added_at DESC
 """, (user_id,)).fetchall()
+    name_row = conn.execute("SELECT first_name FROM users WHERE id = ?", (user_id,)).fetchone()
+    name = get_first_name(name_row) if name_row else ""
     conn.close()
 
     if not courses:
         send_text(to, f"{RLM}🎉 אין לך מטלות פתוחות כרגע!")
-        send_main_menu(to, "אסף")
+        send_main_menu(to, name)
         return
 
     rows = []
@@ -461,11 +463,13 @@ async def show_today(to: str, user_id: int):
         AND is_submitted = 0
         ORDER BY due_date ASC
     """, (user_id, f"{today}%")).fetchall()
+    name_row = conn.execute("SELECT first_name FROM users WHERE id = ?", (user_id,)).fetchone()
+    name = get_first_name(name_row) if name_row else ""
     conn.close()
 
     if not assignments:
         send_text(to, f"{RLM}✅ אין לך מטלות להגשה היום. תהנה!")
-        send_main_menu(to, "אסף")
+        send_main_menu(to, name)
         return
 
     message = f"{RLM}📅 *מטלות להגשה היום:*\n"
