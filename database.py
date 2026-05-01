@@ -64,6 +64,17 @@ def init_db():
             full_name TEXT NOT NULL,
             short_name TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS pending_registrations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone_number TEXT NOT NULL,
+            code TEXT NOT NULL,
+            wstoken TEXT NOT NULL,
+            moodle_user_id INTEGER NOT NULL,
+            first_name TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL
+        );
     """)
 
     conn.commit()

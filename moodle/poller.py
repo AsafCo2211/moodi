@@ -155,6 +155,28 @@ def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list,
     except Exception as e:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Error polling user {user_id}: {e}")
         conn.rollback()
+        error_str = str(e).lower()
+        if "invalidtoken" in error_str or "invalid token" in error_str:
+            try:
+                from bot.sender import send_text
+                from database import get_connection
+                RLM = "‏"
+                conn = get_connection()
+                user = conn.execute(
+                    "SELECT phone_number, first_name FROM users WHERE id = ?",
+                    (user_id,)
+                ).fetchone()
+                conn.close()
+                if user and user["phone_number"]:
+                    send_text(
+                        user["phone_number"],
+                        f"{RLM}היי {user['first_name'] or ''} 👋\n"
+                        f"{RLM}החיבור שלך למודל פג תוקף.\n"
+                        f"{RLM}לחץ כאן לחידוש החיבור:\n"
+                        f"{RLM}https://moodi.aitoolhub.blog/login?phone={user['phone_number']}"
+                    )
+            except Exception as notify_err:
+                print(f"[token-expired] Failed to notify user {user_id}: {notify_err}")
 
     finally:
         conn.close()

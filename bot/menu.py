@@ -92,15 +92,51 @@ async def handle_message(from_number: str, msg_type: str, content: str):
     user = get_user(from_number)
     name = get_first_name(user) if user else ""
 
-    if not user:
-        send_text(from_number,
-            f"{RLM}היי! 👋 אני מודי, העוזר האישי שלך למודל.\n"
-            f"{RLM}כדי להתחיל שלח לי את קוד ההרשמה שקיבלת."
-        )
+    if msg_type == "text":
+        if re.match(r'^\d{6}$', content.strip()):
+            conn = get_connection()
+            row = conn.execute(
+                "SELECT * FROM pending_registrations"
+                " WHERE code = ? AND phone_number = ? AND expires_at > datetime('now')",
+                (content.strip(), from_number),
+            ).fetchone()
+            conn.close()
+            if not row:
+                send_text(from_number, f"{RLM}❌ הקוד שגוי או פג תוקף. נסה להירשם מחדש.")
+                return
+            first_name = row["first_name"]
+            conn = get_connection()
+            conn.execute("""
+                INSERT INTO users (phone_number, moodle_user_id, wstoken, first_name, is_active)
+                VALUES (?, ?, ?, ?, 1)
+                ON CONFLICT(phone_number) DO UPDATE SET
+                    wstoken=excluded.wstoken,
+                    moodle_user_id=excluded.moodle_user_id,
+                    first_name=excluded.first_name,
+                    is_active=1
+            """, (from_number, row["moodle_user_id"], row["wstoken"], first_name))
+            conn.execute(
+                "DELETE FROM pending_registrations WHERE code = ? AND phone_number = ?",
+                (content.strip(), from_number),
+            )
+            conn.commit()
+            conn.close()
+            send_text(from_number, f"{RLM}✅ התחברת בהצלחה! היי {first_name} 👋")
+            send_main_menu(from_number, first_name)
+            return
+
+        if not user:
+            send_text(from_number,
+                f"{RLM}היי! 👋 אני מוודי, העוזר האישי שלך למודל.\n"
+                f"{RLM}לחץ כאן כדי להתחיל:\n"
+                f"{RLM}https://moodi.aitoolhub.blog/login?phone={from_number}"
+            )
+            return
+
+        send_main_menu(from_number, name)
         return
 
-    if msg_type == "text":
-        send_main_menu(from_number, name)
+    if not user:
         return
 
     if msg_type == "button":

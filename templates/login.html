@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>מוודי — התחברות</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f0f4ff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px 16px;
+      color: #1e293b;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 20px;
+      box-shadow: 0 4px 24px rgba(37, 99, 235, 0.10), 0 1px 4px rgba(0,0,0,0.06);
+      padding: 40px 36px 36px;
+      width: 100%;
+      max-width: 420px;
+    }
+
+    /* Logo */
+    .logo {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 28px;
+    }
+
+    .logo-icon {
+      width: 60px;
+      height: 60px;
+      background: #2563eb;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+    }
+
+    .logo-name {
+      font-size: 26px;
+      font-weight: 700;
+      color: #2563eb;
+      letter-spacing: -0.5px;
+    }
+
+    .tagline {
+      text-align: center;
+      color: #64748b;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+
+    /* Form */
+    .field {
+      margin-bottom: 18px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 15px;
+      color: #1e293b;
+      background: #f9fafb;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      outline: none;
+      direction: ltr;
+      text-align: right;
+    }
+
+    input[type="text"]:focus,
+    input[type="password"]:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+      background: #fff;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 13px;
+      background: #2563eb;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.15s, opacity 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn:hover:not(:disabled) { background: #1d4ed8; }
+    .btn:disabled { opacity: 0.65; cursor: not-allowed; }
+
+    /* Spinner */
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2.5px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Error */
+    .error-msg {
+      display: none;
+      color: #dc2626;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 500;
+      margin-top: 14px;
+      text-align: center;
+    }
+
+    /* Success */
+    .success-box {
+      display: none;
+      text-align: center;
+      padding: 8px 0;
+    }
+
+    .success-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .success-label {
+      font-size: 16px;
+      color: #64748b;
+      margin-bottom: 10px;
+    }
+
+    .code-display {
+      font-size: 48px;
+      font-weight: 800;
+      color: #2563eb;
+      letter-spacing: 8px;
+      background: #f0f4ff;
+      border-radius: 12px;
+      padding: 18px 24px;
+      margin: 12px 0 20px;
+      display: inline-block;
+    }
+
+    .success-instructions {
+      font-size: 15px;
+      color: #374151;
+      line-height: 1.7;
+    }
+
+    .success-instructions .timer {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: 600;
+      color: #2563eb;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <!-- Logo -->
+    <div class="logo">
+      <div class="logo-icon">📚</div>
+      <span class="logo-name">מוודי</span>
+    </div>
+
+    <p class="tagline">התחבר עם פרטי BGU שלך כדי לחבר את מוודי למודל שלך</p>
+
+    <!-- Login form -->
+    <form id="loginForm">
+      <input type="hidden" id="phone" name="phone" />
+
+      <div class="field">
+        <label for="username">שם משתמש</label>
+        <input type="text" id="username" name="username" autocomplete="username"
+               placeholder="מספר ת.ז. או שם משתמש BGU" required />
+      </div>
+
+      <div class="field">
+        <label for="password">סיסמה</label>
+        <input type="password" id="password" name="password" autocomplete="current-password"
+               placeholder="••••••••" required />
+      </div>
+
+      <button class="btn" id="submitBtn" type="submit">
+        <span class="spinner" id="spinner"></span>
+        <span id="btnText">התחבר</span>
+      </button>
+
+      <div class="error-msg" id="errorMsg">שם משתמש או סיסמה שגויים, נסה שוב</div>
+    </form>
+
+    <!-- Success state -->
+    <div class="success-box" id="successBox">
+      <div class="success-icon">✅</div>
+      <div class="success-label">הקוד שלך הוא</div>
+      <div class="code-display" id="codeDisplay"></div>
+      <div class="success-instructions">
+        שלח אותו למוודי בוואטסאפ<br />
+        <span class="timer">⏱ תוך 10 דקות</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Populate phone from ?phone= query param
+    const params = new URLSearchParams(window.location.search);
+    const phone = params.get('phone') || '';
+    document.getElementById('phone').value = phone;
+
+    const form = document.getElementById('loginForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const spinner = document.getElementById('spinner');
+    const btnText = document.getElementById('btnText');
+    const errorMsg = document.getElementById('errorMsg');
+    const successBox = document.getElementById('successBox');
+    const codeDisplay = document.getElementById('codeDisplay');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      // Loading state
+      submitBtn.disabled = true;
+      spinner.style.display = 'block';
+      btnText.textContent = 'מתחבר...';
+      errorMsg.style.display = 'none';
+
+      const body = {
+        phone: document.getElementById('phone').value,
+        username: document.getElementById('username').value.trim(),
+        password: document.getElementById('password').value,
+      };
+
+      try {
+        const res = await fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'שגיאה לא ידועה');
+        }
+
+        // Success
+        form.style.display = 'none';
+        codeDisplay.textContent = data.code;
+        successBox.style.display = 'block';
+
+      } catch (err) {
+        errorMsg.style.display = 'block';
+        submitBtn.disabled = false;
+        spinner.style.display = 'none';
+        btnText.textContent = 'התחבר';
+      }
+    });
+  </script>
+</body>
+</html>

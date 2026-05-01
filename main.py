@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from bot.webhook import router as webhook_router
+from auth.webview import router as auth_router
 from database import init_db
 from notifications.scheduler import start_scheduler, stop_scheduler
 
@@ -19,6 +20,7 @@ async def shutdown():
 
 
 app.include_router(webhook_router)
+app.include_router(auth_router)
 
 
 @app.get("/")
