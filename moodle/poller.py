@@ -159,7 +159,6 @@ def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list,
         if "invalidtoken" in error_str or "invalid token" in error_str:
             try:
                 from bot.sender import send_text
-                from database import get_connection
                 RLM = "‏"
                 conn = get_connection()
                 user = conn.execute(
