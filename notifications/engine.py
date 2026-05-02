@@ -214,6 +214,18 @@ def reset_daily_flags():
         "UPDATE personal_tasks SET status='done' "
         "WHERE due_datetime < datetime('now', '-1 hour') AND status='open'"
     )
+    conn.execute("""
+        DELETE FROM task_reminders
+        WHERE task_id IN (
+            SELECT id FROM personal_tasks
+            WHERE status IN ('deleted', 'done')
+        )
+    """)
+    conn.execute("""
+        DELETE FROM personal_tasks
+        WHERE status IN ('deleted', 'done')
+        AND created_at < datetime('now', '-7 days')
+    """)
     conn.commit()
     conn.close()
-    logger.info(f"Daily notification flags reset at {datetime.now()}")
+    logger.info(f"Daily flags reset and personal task cleanup done at {datetime.now()}")

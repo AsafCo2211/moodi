@@ -2,6 +2,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from moodle.poller import poll_all_users
 from notifications.engine import send_morning_summary, send_evening_reminder, reset_daily_flags
 from config import POLLING_ENABLED
+from database import get_connection
 from utils.logger import get_logger
 from datetime import datetime
 
@@ -25,7 +26,6 @@ def send_task_reminder(reminder_id: int, user_id: int, phone_number: str, title:
 
 
 def schedule_reminder(task_id: int, user_id: int, phone_number: str, title: str, remind_at: str):
-    from database import get_connection
     conn = get_connection()
     row = conn.execute(
         "SELECT id FROM task_reminders WHERE task_id=? AND remind_at=? AND sent=0",

@@ -94,6 +94,47 @@ def parse_user_request(text: str, user_name: str, existing_tasks: list = []) -> 
                  "title": None, "due_datetime": None, "task_reference": None, "task_id": None}]
 
 
+def generate_status_report(first_name: str, assignments: list, personal_tasks: list) -> str:
+    from datetime import timezone, timedelta
+    RLM = "‏"
+    israel_tz = timezone(timedelta(hours=3))
+    today = datetime.now(israel_tz).strftime("%Y-%m-%d %H:%M")
+
+    prompt = f"""You are Moodi, a personal assistant for Israeli students.
+Today is {today}. The user's name is {first_name}.
+
+Write a focused weekly status report in Hebrew.
+Format it as a WhatsApp message with RLM (\\u200f) at the start of EVERY line.
+Keep it concise — max 20 lines total.
+
+Structure:
+1. Short greeting line
+2. Section "📚 מטלות לשבוע הקרוב:" — list Moodle assignments with due dates
+3. Section "🗓️ משימות אישיות:" — list personal tasks with dates
+4. One short motivating closing line
+
+If a section is empty, write "אין 🎉" for that section.
+Use emojis for visual clarity.
+Every line MUST start with \\u200f.
+
+Moodle assignments this week:
+{json.dumps([{{'name': a['assignment_name'], 'course': a['course_name'], 'due': a['due_date']}} for a in assignments], ensure_ascii=False)}
+
+Personal tasks this week:
+{json.dumps([{{'title': t['title'], 'due': t['due_datetime']}} for t in personal_tasks], ensure_ascii=False)}
+"""
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+        return response.text
+    except Exception as e:
+        logger.error(f"Status report generation failed: {e}")
+        return f"{RLM}לא הצלחתי ליצור דוח מצב כרגע, נסה שוב מאוחר יותר"
+
+
 def transcribe_audio(audio_bytes: bytes) -> str:
     try:
         part = types.Part.from_bytes(data=audio_bytes, mime_type="audio/ogg; codecs=opus")

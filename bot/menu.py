@@ -168,6 +168,8 @@ async def handle_message(from_number: str, msg_type: str, content: str):
             send_main_menu(from_number, name)
         elif content == "menu_other":
             send_text(from_number, f"{RLM}במה אוכל לעזור? 😊\n{RLM}כתוב לי חופשי או שלח הודעה קולית 🎤")
+        elif content == "menu_status":
+            await send_status_report(from_number, user["id"])
         elif content == "back_grades":
             await show_grades(from_number, user["id"])
         elif content.startswith("show_all_"):
@@ -192,6 +194,8 @@ async def handle_message(from_number: str, msg_type: str, content: str):
             await send_dashboard_link(from_number, user["id"])
         elif content == "menu_other":
             send_text(from_number, f"{RLM}במה אוכל לעזור? 😊\n{RLM}כתוב לי חופשי או שלח הודעה קולית 🎤")
+        elif content == "menu_status":
+            await send_status_report(from_number, user["id"])
         elif content == "back_main":
             send_main_menu(from_number, name)
         elif content == "course_all":
@@ -204,6 +208,45 @@ async def handle_message(from_number: str, msg_type: str, content: str):
         elif content.startswith("grades_course_"):
             course_id = int(content.replace("grades_course_", ""))
             await show_grades_for_course(from_number, user["id"], course_id)
+
+
+async def send_status_report(phone_number: str, user_id: int):
+    from utils.task_manager import get_upcoming_tasks
+    from utils.ai_assistant import generate_status_report
+
+    conn = get_connection()
+    assignments = conn.execute("""
+        SELECT a.assignment_name, a.course_name, a.due_date
+        FROM assignments a
+        LEFT JOIN user_assignment_settings uas
+            ON a.user_id = uas.user_id AND a.moodle_assign_id = uas.moodle_assign_id
+        LEFT JOIN user_courses uc ON a.user_id = uc.user_id AND a.course_name = uc.course_name
+        LEFT JOIN user_course_settings ucs ON uc.user_id = ucs.user_id AND uc.course_id = ucs.course_id
+        WHERE a.user_id = ?
+          AND a.is_submitted = 0
+          AND COALESCE(uas.status, 'open') = 'open'
+          AND COALESCE(ucs.is_active, 1) = 1
+          AND a.due_date >= datetime('now')
+          AND a.due_date <= datetime('now', '+7 days')
+        ORDER BY a.due_date ASC
+    """, (user_id,)).fetchall()
+    first_name_row = conn.execute(
+        "SELECT first_name FROM users WHERE id=?", (user_id,)
+    ).fetchone()
+    first_name = (first_name_row["first_name"] or "") if first_name_row else ""
+    conn.close()
+
+    personal_tasks = get_upcoming_tasks(user_id, days=7)
+
+    report = generate_status_report(
+        first_name=first_name,
+        assignments=[dict(a) for a in assignments],
+        personal_tasks=personal_tasks,
+    )
+    send_text(phone_number, report)
+    send_buttons(phone_number, f"{RLM}מה תרצה לעשות?", [
+        {"id": "back_main", "title": "⬅️ תפריט ראשי"}
+    ])
 
 
 async def send_dashboard_link(phone_number: str, user_id: int):
@@ -238,7 +281,7 @@ def send_main_menu(to: str, name: str):
                 {"id": "menu_grades", "title": "🎓 ציונים בקורסים"},
                 {"id": "menu_upcoming", "title": "📅 הגשות קרובות"},
                 {"id": "menu_dashboard", "title": "🖥️ הדאשבורד שלי"},
-                {"id": "menu_other", "title": "💬 עניין אחר"},
+                {"id": "menu_status", "title": "📊 דוח מצב"},
             ]
         }]
     )
