@@ -7,6 +7,7 @@ logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 from fastapi import FastAPI
 from bot.webhook import router as webhook_router
 from auth.webview import router as auth_router
+from auth.dashboard import router as dashboard_router
 from database import init_db
 from notifications.scheduler import start_scheduler, stop_scheduler
 from utils.logger import get_logger
@@ -30,6 +31,7 @@ async def shutdown():
 
 app.include_router(webhook_router)
 app.include_router(auth_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/")

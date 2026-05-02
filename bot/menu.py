@@ -174,6 +174,8 @@ async def handle_message(from_number: str, msg_type: str, content: str):
             await show_grades(from_number, user["id"])
         elif content == "menu_today":
             await show_today(from_number, user["id"])
+        elif content == "menu_dashboard":
+            await send_dashboard_link(from_number, user["id"])
         elif content == "menu_other":
             send_text(from_number, f"{RLM}במה אוכל לעזור? שלח לי הודעה חופשית 💬")
         elif content == "back_main":
@@ -190,6 +192,26 @@ async def handle_message(from_number: str, msg_type: str, content: str):
             await show_grades_for_course(from_number, user["id"], course_id)
 
 
+async def send_dashboard_link(phone_number: str, user_id: int):
+    import random
+    code = str(random.randint(100000, 999999))
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO dashboard_sessions (phone_number, code, expires_at) "
+        "VALUES (?, ?, datetime('now', '+10 minutes'))",
+        (phone_number, code),
+    )
+    conn.commit()
+    conn.close()
+    send_text(
+        phone_number,
+        f"{RLM}הדאשבורד שלך מוכן! 🖥️\n"
+        f"{RLM}לחץ על הקישור כדי להיכנס:\n"
+        f"{RLM}https://moodi.aitoolhub.blog/dashboard?phone={phone_number}&code={code}\n\n"
+        f"{RLM}⏱️ הקישור תקף ל-10 דקות בלבד.",
+    )
+
+
 def send_main_menu(to: str, name: str):
     send_list(
         to=to,
@@ -201,6 +223,7 @@ def send_main_menu(to: str, name: str):
                 {"id": "menu_assignments", "title": "📋 המטלות שלי"},
                 {"id": "menu_grades", "title": "🎓 ציונים בקורסים"},
                 {"id": "menu_today", "title": "📅 להגשה היום"},
+                {"id": "menu_dashboard", "title": "🖥️ הדאשבורד שלי"},
                 {"id": "menu_other", "title": "💬 עניין אחר"},
             ]
         }]

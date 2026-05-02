@@ -78,6 +78,32 @@ def init_db():
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             expires_at DATETIME NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS dashboard_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone_number TEXT NOT NULL,
+            code TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            last_active DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS user_course_settings (
+            user_id INTEGER NOT NULL,
+            course_id INTEGER NOT NULL,
+            is_active BOOLEAN DEFAULT 1,
+            PRIMARY KEY (user_id, course_id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS user_assignment_settings (
+            user_id INTEGER NOT NULL,
+            moodle_assign_id INTEGER NOT NULL,
+            status TEXT DEFAULT 'open',
+            note TEXT,
+            PRIMARY KEY (user_id, moodle_assign_id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
     """)
 
     conn.commit()
