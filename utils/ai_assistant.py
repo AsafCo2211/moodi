@@ -71,7 +71,7 @@ def parse_user_request(text: str, user_name: str, existing_tasks: list = []) -> 
 
     try:
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             contents=prompt
         )
         raw = response.text.strip()
@@ -126,7 +126,7 @@ Personal tasks this week:
 
     try:
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             contents=prompt
         )
         return response.text
@@ -139,7 +139,7 @@ def transcribe_audio(audio_bytes: bytes) -> str:
     try:
         part = types.Part.from_bytes(data=audio_bytes, mime_type="audio/ogg; codecs=opus")
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             contents=[
                 part,
                 "Transcribe this Hebrew audio message exactly as spoken. Return only the transcribed text, no explanations."
