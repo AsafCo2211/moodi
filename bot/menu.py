@@ -278,13 +278,21 @@ async def show_assignments(to: str, user_id: int, course_id, user=None, full_vie
 
     if course_id is None:
         rows = conn.execute("""
-            SELECT course_name, assignment_name, due_date
-            FROM assignments
-            WHERE user_id = ?
-              AND is_submitted = 0
+            SELECT a.course_name, a.assignment_name, a.due_date
+            FROM assignments a
+            LEFT JOIN user_courses uc
+              ON a.user_id = uc.user_id AND a.course_name = uc.course_name
+            LEFT JOIN user_course_settings ucs
+              ON uc.user_id = ucs.user_id AND uc.course_id = ucs.course_id
+            LEFT JOIN user_assignment_settings uas
+              ON a.user_id = uas.user_id AND a.moodle_assign_id = uas.moodle_assign_id
+            WHERE a.user_id = ?
+              AND a.is_submitted = 0
+              AND COALESCE(ucs.is_active, 1) = 1
+              AND COALESCE(uas.status, 'open') = 'open'
             ORDER BY
-                CASE WHEN due_date IS NULL THEN 1 ELSE 0 END ASC,
-                due_date ASC
+                CASE WHEN a.due_date IS NULL THEN 1 ELSE 0 END ASC,
+                a.due_date ASC
         """, (user_id,)).fetchall()
         course_header = None
     else:
@@ -294,14 +302,22 @@ async def show_assignments(to: str, user_id: int, course_id, user=None, full_vie
         ).fetchone()
         course_header = course_name_row["course_name"]
         rows = conn.execute("""
-            SELECT course_name, assignment_name, due_date
-            FROM assignments
-            WHERE user_id = ?
-              AND course_name = ?
-              AND is_submitted = 0
+            SELECT a.course_name, a.assignment_name, a.due_date
+            FROM assignments a
+            LEFT JOIN user_courses uc
+              ON a.user_id = uc.user_id AND a.course_name = uc.course_name
+            LEFT JOIN user_course_settings ucs
+              ON uc.user_id = ucs.user_id AND uc.course_id = ucs.course_id
+            LEFT JOIN user_assignment_settings uas
+              ON a.user_id = uas.user_id AND a.moodle_assign_id = uas.moodle_assign_id
+            WHERE a.user_id = ?
+              AND a.course_name = ?
+              AND a.is_submitted = 0
+              AND COALESCE(ucs.is_active, 1) = 1
+              AND COALESCE(uas.status, 'open') = 'open'
             ORDER BY
-                CASE WHEN due_date IS NULL THEN 1 ELSE 0 END ASC,
-                due_date ASC
+                CASE WHEN a.due_date IS NULL THEN 1 ELSE 0 END ASC,
+                a.due_date ASC
         """, (user_id, course_header)).fetchall()
     conn.close()
 
@@ -499,12 +515,15 @@ async def show_today(to: str, user_id: int):
     today = datetime.now().strftime('%Y-%m-%d')
     conn = get_connection()
     assignments = conn.execute("""
-        SELECT course_name, assignment_name, due_date
-        FROM assignments
-        WHERE user_id = ?
-        AND due_date LIKE ?
-        AND is_submitted = 0
-        ORDER BY due_date ASC
+        SELECT a.course_name, a.assignment_name, a.due_date
+        FROM assignments a
+        LEFT JOIN user_assignment_settings uas
+          ON a.user_id = uas.user_id AND a.moodle_assign_id = uas.moodle_assign_id
+        WHERE a.user_id = ?
+        AND a.due_date LIKE ?
+        AND a.is_submitted = 0
+        AND COALESCE(uas.status, 'open') = 'open'
+        ORDER BY a.due_date ASC
     """, (user_id, f"{today}%")).fetchall()
     name_row = conn.execute("SELECT first_name FROM users WHERE id = ?", (user_id,)).fetchone()
     name = get_first_name(name_row) if name_row else ""
