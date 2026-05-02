@@ -25,6 +25,14 @@ def send_task_reminder(reminder_id: int, user_id: int, phone_number: str, title:
         logger.error(f"Failed to send reminder {reminder_id}: {e}")
 
 
+def cancel_task_reminders(task_id: int):
+    prefix = f"reminder_{task_id}_"
+    for job in scheduler.get_jobs():
+        if job.id.startswith(prefix):
+            job.remove()
+    logger.info(f"Cancelled scheduled reminders for task {task_id}")
+
+
 def schedule_reminder(task_id: int, user_id: int, phone_number: str, title: str, remind_at: str):
     conn = get_connection()
     row = conn.execute(
@@ -43,7 +51,7 @@ def schedule_reminder(task_id: int, user_id: int, phone_number: str, title: str,
             trigger='date',
             run_date=run_date,
             args=[reminder_id, user_id, phone_number, title],
-            id=f"reminder_{reminder_id}",
+            id=f"reminder_{task_id}_{reminder_id}",
             replace_existing=True
         )
         logger.info(f"Scheduled reminder {reminder_id} for task {task_id} at {remind_at}")
@@ -61,7 +69,7 @@ def load_task_reminders():
                 trigger='date',
                 run_date=datetime.fromisoformat(r['remind_at']),
                 args=[r['id'], r['user_id'], r['phone_number'], r['title']],
-                id=f"reminder_{r['id']}",
+                id=f"reminder_{r['task_id']}_{r['id']}",
                 replace_existing=True
             )
         except Exception as e:

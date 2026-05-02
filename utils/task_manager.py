@@ -117,6 +117,7 @@ def delete_task_by_id(task_id: int, user_id: int) -> bool:
 
 
 def add_reminders_to_task(task_id: int, user_id: int, reminder_times: list) -> bool:
+    from notifications.scheduler import cancel_task_reminders
     conn = get_connection()
     try:
         task = conn.execute(
@@ -125,13 +126,18 @@ def add_reminders_to_task(task_id: int, user_id: int, reminder_times: list) -> b
         ).fetchone()
         if not task:
             return False
+        cancel_task_reminders(task_id)
+        conn.execute(
+            "DELETE FROM task_reminders WHERE task_id=? AND user_id=? AND sent=0",
+            (task_id, user_id)
+        )
         for remind_at in reminder_times:
             conn.execute(
                 "INSERT INTO task_reminders (task_id, user_id, remind_at) VALUES (?, ?, ?)",
                 (task_id, user_id, remind_at)
             )
         conn.commit()
-        logger.info(f"Added {len(reminder_times)} reminders to task {task_id}")
+        logger.info(f"Replaced reminders for task {task_id} with {len(reminder_times)} new ones")
         return True
     except Exception as e:
         logger.error(f"add_reminders_to_task failed: {e}")
@@ -143,7 +149,7 @@ def add_reminders_to_task(task_id: int, user_id: int, reminder_times: list) -> b
 def load_pending_reminders() -> list:
     conn = get_connection()
     rows = conn.execute("""
-        SELECT tr.id, tr.user_id, tr.remind_at, pt.title, u.phone_number
+        SELECT tr.id, tr.task_id, tr.user_id, tr.remind_at, pt.title, u.phone_number
         FROM task_reminders tr
         JOIN personal_tasks pt ON tr.task_id = pt.id
         JOIN users u ON tr.user_id = u.id
