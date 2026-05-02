@@ -576,7 +576,7 @@ async def show_upcoming(to: str, user_id: int, days: int):
                 due_str = due.strftime('%d/%m %H:%M')
             else:
                 due_str = "ללא תאריך"
-            message += f"{RLM}   📋 {a['assignment_name'].strip()} | 📅 {due_str}\n"
+            message += f"{RLM}      📋 {a['assignment_name'].strip()}\n      {due_str}"
         message += "\n"
 
     send_text(to, message)
