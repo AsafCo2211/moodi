@@ -104,6 +104,26 @@ def init_db():
             PRIMARY KEY (user_id, moodle_assign_id),
             FOREIGN KEY (user_id) REFERENCES users(id)
         );
+
+        CREATE TABLE IF NOT EXISTS personal_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            due_datetime DATETIME,
+            status TEXT DEFAULT 'open',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS task_reminders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            remind_at DATETIME NOT NULL,
+            sent BOOLEAN DEFAULT 0,
+            FOREIGN KEY (task_id) REFERENCES personal_tasks(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
     """)
 
     conn.commit()

@@ -149,17 +149,25 @@ async def handle_message(from_number: str, msg_type: str, content: str):
             )
             return
 
+        has_hebrew = bool(re.search(r'[֐-׿]', content))
+        if has_hebrew and len(content.split()) >= 2:
+            await handle_ai_request(from_number, content, user)
+            return
+
         send_main_menu(from_number, name)
         return
 
     if not user:
         return
 
-    if msg_type == "button":
+    if msg_type == "audio":
+        await handle_audio_message(from_number, content, user)
+
+    elif msg_type == "button":
         if content == "back_main":
             send_main_menu(from_number, name)
         elif content == "menu_other":
-            send_text(from_number, f"{RLM}במה אוכל לעזור? שלח לי הודעה חופשית 💬")
+            send_text(from_number, f"{RLM}במה אוכל לעזור? 😊\n{RLM}כתוב לי חופשי או שלח הודעה קולית 🎤")
         elif content == "back_grades":
             await show_grades(from_number, user["id"])
         elif content.startswith("show_all_"):
@@ -183,7 +191,7 @@ async def handle_message(from_number: str, msg_type: str, content: str):
         elif content == "menu_dashboard":
             await send_dashboard_link(from_number, user["id"])
         elif content == "menu_other":
-            send_text(from_number, f"{RLM}במה אוכל לעזור? שלח לי הודעה חופשית 💬")
+            send_text(from_number, f"{RLM}במה אוכל לעזור? 😊\n{RLM}כתוב לי חופשי או שלח הודעה קולית 🎤")
         elif content == "back_main":
             send_main_menu(from_number, name)
         elif content == "course_all":
@@ -583,6 +591,82 @@ async def show_upcoming(to: str, user_id: int, days: int):
     send_text(to, message)
     send_buttons(to, f"{RLM}מה תרצה לעשות?", [
         {"id": "back_main", "title": "⬅️ תפריט ראשי"},
+    ])
+
+
+async def handle_audio_message(from_number: str, media_id: str, user):
+    from utils.whatsapp_media import download_whatsapp_audio
+    from utils.ai_assistant import transcribe_audio
+
+    audio_bytes = download_whatsapp_audio(media_id)
+    if not audio_bytes:
+        send_text(from_number, f"{RLM}לא הצלחתי לעבד את ההקלטה, נסה שוב")
+        return
+
+    text = transcribe_audio(audio_bytes)
+    if not text:
+        send_text(from_number, f"{RLM}לא הצלחתי להבין את ההקלטה, נסה לכתוב")
+        return
+
+    await handle_ai_request(from_number, text, user)
+
+
+async def handle_ai_request(from_number: str, text: str, user):
+    from utils.ai_assistant import parse_user_request
+    from utils.task_manager import create_task, delete_task_by_reference, update_task_datetime, get_upcoming_tasks
+    from notifications.scheduler import schedule_reminder
+
+    name = get_first_name(user)
+    result = parse_user_request(text, name)
+    action = result.get("action")
+
+    if action == "add_task":
+        task_id = create_task(
+            user["id"],
+            result["title"],
+            result.get("due_datetime"),
+            result.get("reminders", [])
+        )
+        for remind_at in result.get("reminders", []):
+            schedule_reminder(task_id, user["id"], from_number, result["title"], remind_at)
+
+        due_str = f" ב-{result['due_datetime']}" if result.get("due_datetime") else ""
+        reminders_str = f"\n{RLM}⏰ תזכורות הוגדרו" if result.get("reminders") else ""
+        send_text(from_number, f"{RLM}✅ נוסף: {result['title']}{due_str}{reminders_str}")
+
+    elif action == "list_tasks":
+        tasks = get_upcoming_tasks(user["id"])
+        if not tasks:
+            send_text(from_number, f"{RLM}אין לך משימות אישיות קרובות 🎉")
+        else:
+            msg = f"{RLM}📋 המשימות האישיות שלך:\n\n"
+            for t in tasks:
+                due = f" | {t['due_datetime'][:16]}" if t['due_datetime'] else ""
+                msg += f"{RLM}• {t['title']}{due}\n"
+            send_text(from_number, msg)
+
+    elif action == "delete_task":
+        success = delete_task_by_reference(user["id"], result.get("task_reference", ""))
+        if success:
+            send_text(from_number, f"{RLM}✅ המשימה הוסרה")
+        else:
+            send_text(from_number, f"{RLM}לא מצאתי משימה כזו")
+
+    elif action == "update_task":
+        success = update_task_datetime(user["id"], result.get("task_reference", ""), result.get("due_datetime"))
+        if success:
+            send_text(from_number, f"{RLM}✅ המשימה עודכנה")
+        else:
+            send_text(from_number, f"{RLM}לא מצאתי משימה כזו")
+
+    else:
+        send_text(from_number,
+            f"{RLM}לצערי, אני יכול לעזור רק עם ניהול משימות ותזכורות אישיות 😊\n"
+            f"{RLM}לדוגמה: ״תור לספר מחר בשעה 11״ או ״תזכיר לי על X ב-Y״"
+        )
+
+    send_buttons(from_number, f"{RLM}מה עוד?", [
+        {"id": "back_main", "title": "⬅️ תפריט ראשי"}
     ])
 
 

@@ -178,6 +178,14 @@
       flex-shrink: 0;
     }
 
+    .day-dot-task {
+      width: 6px; height: 6px;
+      border-radius: 2px;
+      transform: rotate(45deg);
+      flex-shrink: 0;
+      background: #6b7280;
+    }
+
     .day-more {
       font-size: 9px;
       color: #64748b;
@@ -503,8 +511,9 @@
     const MONTHS_HE = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
     const DAY_NAMES = ['א','ב','ג','ד','ה','ו','ש']; // Sun→Sat
 
-    let allAssignments = [];
-    let courseColors   = {};
+    let allAssignments   = [];
+    let allPersonalTasks = [];
+    let courseColors     = {};
     let calYear, calMonth;
 
     const now = new Date();
@@ -587,13 +596,20 @@
 
       const grid = document.getElementById('cal-grid');
 
-      // Build assignment map for this month
+      // Build combined event map for this month
       const assignMap = {};
       allAssignments.forEach(a => {
         const k = dateKey(a.due_date);
         if (k) {
           if (!assignMap[k]) assignMap[k] = [];
-          assignMap[k].push(a);
+          assignMap[k].push({ ...a, _type: 'assignment' });
+        }
+      });
+      allPersonalTasks.forEach(t => {
+        const k = dateKey(t.due_datetime);
+        if (k) {
+          if (!assignMap[k]) assignMap[k] = [];
+          assignMap[k].push({ ...t, _type: 'task' });
         }
       });
 
@@ -623,8 +639,12 @@
 
         let dots = '';
         const visible = items.slice(0, 3);
-        visible.forEach(a => {
-          dots += `<div class="day-dot" style="background:${getCourseColor(a.course_name)}"></div>`;
+        visible.forEach(item => {
+          if (item._type === 'task') {
+            dots += `<div class="day-dot-task"></div>`;
+          } else {
+            dots += `<div class="day-dot" style="background:${getCourseColor(item.course_name)}"></div>`;
+          }
         });
         if (items.length > 3) {
           dots += `<span class="day-more">+${items.length - 3}</span>`;
@@ -660,29 +680,48 @@
         }
       });
 
-      const items = allAssignments.filter(a => a.due_date && a.due_date.startsWith(dateKey));
-      const detail = document.getElementById('cal-detail');
+      const moodleItems = allAssignments.filter(a => a.due_date && a.due_date.startsWith(dateKey));
+      const taskItems   = allPersonalTasks.filter(t => t.due_datetime && t.due_datetime.startsWith(dateKey));
+      const items       = [...moodleItems, ...taskItems];
+      const detail      = document.getElementById('cal-detail');
 
       const [y, m, d] = dateKey.split('-');
       const dateLabel = `${parseInt(d)} ב${MONTHS_HE[parseInt(m) - 1]} ${y}`;
 
       if (!items.length) {
         detail.innerHTML = `
-          <div class="cal-detail-title">מטלות ל-${dateLabel}</div>
+          <div class="cal-detail-title">📅 ${dateLabel}</div>
           <div class="cal-empty">אין מטלות ביום זה ✅</div>`;
         return;
       }
 
-      const eventsHtml = items.map(a => {
-        const color  = getCourseColor(a.course_name);
-        const time   = fmtTime(a.due_date);
-        const st     = statusLabel(a.status);
+      const eventsHtml = items.map(item => {
+        if (item.title) {
+          // personal task
+          const time = fmtTime(item.due_datetime);
+          return `
+            <div class="cal-event">
+              <div class="cal-event-stripe" style="background:#6b7280;border-style:dashed"></div>
+              <div class="cal-event-info">
+                <div class="cal-event-course" style="color:#6b7280">📌 משימה אישית</div>
+                <div class="cal-event-name">${item.title}</div>
+                <div class="cal-event-footer">
+                  ${time ? `<span class="cal-event-time">🕐 ${time}</span>` : ''}
+                  <span class="status-badge status-open">פתוחה</span>
+                </div>
+              </div>
+            </div>`;
+        }
+        // moodle assignment
+        const color = getCourseColor(item.course_name);
+        const time  = fmtTime(item.due_date);
+        const st    = statusLabel(item.status);
         return `
           <div class="cal-event">
             <div class="cal-event-stripe" style="background:${color}"></div>
             <div class="cal-event-info">
-              <div class="cal-event-course" style="color:${color}">${a.course_name}</div>
-              <div class="cal-event-name">${a.assignment_name}</div>
+              <div class="cal-event-course" style="color:${color}">${item.course_name}</div>
+              <div class="cal-event-name">${item.assignment_name}</div>
               <div class="cal-event-footer">
                 ${time ? `<span class="cal-event-time">🕐 ${time}</span>` : ''}
                 <span class="status-badge ${st.cls}">${st.text}</span>
@@ -692,7 +731,7 @@
       }).join('');
 
       detail.innerHTML = `
-        <div class="cal-detail-title">מטלות ל-${dateLabel}</div>
+        <div class="cal-detail-title">📅 ${dateLabel}</div>
         ${eventsHtml}`;
     }
 
@@ -773,10 +812,22 @@
       }
     }
 
+    async function fetchPersonalTasks() {
+      try {
+        const res = await fetch(`/api/dashboard/personal-tasks?phone=${encodeURIComponent(phone)}&code=${encodeURIComponent(code)}`);
+        if (res.status === 401) { showExpired(); return false; }
+        allPersonalTasks = await res.json();
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
     // ─── Init ───
     async function init() {
       loadCourses();
-      if (await fetchAssignments()) {
+      const [assignOk] = await Promise.all([fetchAssignments(), fetchPersonalTasks()]);
+      if (assignOk) {
         renderCalendar();
         renderAssignmentList();
       }

@@ -66,6 +66,11 @@ async def receive_message(request: Request):
                 logger.info(f"MSG from {from_number}: list = {list_id}")
                 await handle_message(from_number, "list", list_id)
 
+        elif msg_type == "audio":
+            audio_id = message["audio"]["id"]
+            logger.info(f"MSG from {from_number}: audio id={audio_id}")
+            await handle_message(from_number, "audio", audio_id)
+
     except Exception as e:
         logger.error(f"Webhook error: {e}", exc_info=True)
 

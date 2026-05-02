@@ -191,6 +191,24 @@ async def update_assignment(body: UpdateAssignmentBody):
     return {"ok": True}
 
 
+@router.get("/api/dashboard/personal-tasks")
+async def get_personal_tasks(phone: str, code: str):
+    _validate_session(phone, code)
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT id, title, due_datetime
+        FROM personal_tasks
+        WHERE user_id=(SELECT id FROM users WHERE phone_number=?)
+          AND status='open' AND due_datetime IS NOT NULL
+        ORDER BY due_datetime ASC
+        """,
+        (phone,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 class RefreshSessionBody(BaseModel):
     phone: str
     code: str
