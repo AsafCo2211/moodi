@@ -1,6 +1,8 @@
 import warnings
+import logging
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 from fastapi import FastAPI
 from bot.webhook import router as webhook_router
