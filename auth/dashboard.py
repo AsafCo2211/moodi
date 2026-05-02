@@ -103,7 +103,9 @@ async def get_courses(phone: str, code: str):
         LEFT JOIN user_course_settings ucs
           ON uc.user_id = ucs.user_id AND uc.course_id = ucs.course_id
         WHERE uc.user_id = (SELECT id FROM users WHERE phone_number = ?)
-        ORDER BY uc.added_at DESC
+        ORDER BY
+            COALESCE(ucs.is_active, 1) DESC,
+            uc.added_at DESC
         """,
         (phone,),
     ).fetchall()

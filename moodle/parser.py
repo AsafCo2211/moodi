@@ -1,8 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 import html
 
 def parse_courses(raw_courses: list) -> list:
+    eight_months_ago = datetime.now() - timedelta(days=240)
+    eight_months_ago_ts = int(eight_months_ago.timestamp())
+
     active = [
         {
             "id": c["id"],
@@ -12,6 +15,7 @@ def parse_courses(raw_courses: list) -> list:
         }
         for c in raw_courses
         if not c.get("hidden", False)
+        and (c.get("startdate", 0) == 0 or c.get("startdate", 0) >= eight_months_ago_ts)
     ]
     return sorted(active, key=lambda x: x["start_date"], reverse=True)
 
