@@ -714,12 +714,28 @@
         return `<span class="due-chip grey">⚫ ${label}</span>`;
       }
       if (!dueDateStr) return `<span class="due-chip grey">ללא תאריך</span>`;
-      const due  = new Date(dueDateStr.replace(' ', 'T'));
-      const diff = Math.floor((due - now) / 86400000);
-      const dateStr = due.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-      if (diff < 0)   return `<span class="due-chip grey">⚫ ${dateStr}</span>`;
-      if (diff === 0) return `<span class="due-chip red">🔴 היום ${due.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</span>`;
-      if (diff <= 3)  return `<span class="due-chip yellow">🟡 ${dateStr}</span>`;
+
+      const due = new Date(dueDateStr.replace(' ', 'T'));
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const in3Days = new Date(today);
+      in3Days.setDate(in3Days.getDate() + 3);
+
+      const dueDay = new Date(due);
+      dueDay.setHours(0, 0, 0, 0);
+
+      const timeStr = due.toTimeString().slice(0, 5);
+      const dateStr = due.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' }) + ' ' + timeStr;
+
+      if (dueDay < today)                          return `<span class="due-chip grey">⚫ ${dateStr}</span>`;
+      if (dueDay.getTime() === today.getTime())    return `<span class="due-chip red">🔴 היום ${timeStr}</span>`;
+      if (dueDay.getTime() === tomorrow.getTime()) return `<span class="due-chip yellow">🟡 מחר ${timeStr}</span>`;
+      if (dueDay <= in3Days)                       return `<span class="due-chip yellow">🟡 ${dateStr}</span>`;
       return `<span class="due-chip green">🟢 ${dateStr}</span>`;
     }
 
