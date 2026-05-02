@@ -210,6 +210,10 @@ def reset_daily_flags():
         "UPDATE assignments SET notified_today = 0, notified_evening = 0 WHERE due_date >= ?",
         (today_str,)
     )
+    conn.execute(
+        "UPDATE personal_tasks SET status='done' "
+        "WHERE due_datetime < datetime('now', '-1 hour') AND status='open'"
+    )
     conn.commit()
     conn.close()
     logger.info(f"Daily notification flags reset at {datetime.now()}")

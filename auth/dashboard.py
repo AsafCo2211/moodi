@@ -209,6 +209,79 @@ async def get_personal_tasks(phone: str, code: str):
     return [dict(r) for r in rows]
 
 
+@router.get("/api/dashboard/personal-tasks-full")
+async def get_personal_tasks_full(phone: str, code: str):
+    _validate_session(phone, code)
+    conn = get_connection()
+    tasks = conn.execute(
+        """
+        SELECT id, title, due_datetime, status, created_at
+        FROM personal_tasks
+        WHERE user_id=(SELECT id FROM users WHERE phone_number=?)
+          AND status='open'
+        ORDER BY
+            CASE WHEN due_datetime IS NULL THEN 1 ELSE 0 END ASC,
+            due_datetime ASC
+        """,
+        (phone,),
+    ).fetchall()
+    result = []
+    for t in tasks:
+        task = dict(t)
+        reminders = conn.execute(
+            "SELECT remind_at, sent FROM task_reminders WHERE task_id=? AND sent=0",
+            (t["id"],),
+        ).fetchall()
+        task["reminders"] = [dict(r) for r in reminders]
+        result.append(task)
+    conn.close()
+    return result
+
+
+class UpdatePersonalTaskBody(BaseModel):
+    phone: str
+    code: str
+    task_id: int
+    title: str
+    due_datetime: str | None = None
+
+
+@router.post("/api/dashboard/personal-tasks/update")
+async def update_personal_task(body: UpdatePersonalTaskBody):
+    _validate_session(body.phone, body.code)
+    user_id = _get_user_id(body.phone)
+    conn = get_connection()
+    conn.execute(
+        "UPDATE personal_tasks SET title=?, due_datetime=? WHERE id=? AND user_id=?",
+        (body.title, body.due_datetime, body.task_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+    logger.info(f"Personal task {body.task_id} updated for user {user_id}")
+    return {"ok": True}
+
+
+class DeletePersonalTaskBody(BaseModel):
+    phone: str
+    code: str
+    task_id: int
+
+
+@router.post("/api/dashboard/personal-tasks/delete")
+async def delete_personal_task(body: DeletePersonalTaskBody):
+    _validate_session(body.phone, body.code)
+    user_id = _get_user_id(body.phone)
+    conn = get_connection()
+    conn.execute(
+        "UPDATE personal_tasks SET status='deleted' WHERE id=? AND user_id=?",
+        (body.task_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+    logger.info(f"Personal task {body.task_id} deleted for user {user_id}")
+    return {"ok": True}
+
+
 class RefreshSessionBody(BaseModel):
     phone: str
     code: str

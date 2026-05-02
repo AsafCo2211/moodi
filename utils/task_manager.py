@@ -80,6 +80,42 @@ def get_upcoming_tasks(user_id: int, days: int = 7) -> list:
     return [dict(r) for r in rows]
 
 
+def update_task_by_id(task_id: int, user_id: int, title: str = None, due_datetime: str = None) -> bool:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT id FROM personal_tasks WHERE id=? AND user_id=? AND status='open'",
+        (task_id, user_id)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return False
+    conn.execute(
+        "UPDATE personal_tasks SET title=COALESCE(?,title), due_datetime=COALESCE(?,due_datetime) WHERE id=? AND user_id=?",
+        (title, due_datetime, task_id, user_id)
+    )
+    conn.commit()
+    conn.close()
+    return True
+
+
+def delete_task_by_id(task_id: int, user_id: int) -> bool:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT id FROM personal_tasks WHERE id=? AND user_id=? AND status='open'",
+        (task_id, user_id)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return False
+    conn.execute(
+        "UPDATE personal_tasks SET status='deleted' WHERE id=? AND user_id=?",
+        (task_id, user_id)
+    )
+    conn.commit()
+    conn.close()
+    return True
+
+
 def load_pending_reminders() -> list:
     conn = get_connection()
     rows = conn.execute("""

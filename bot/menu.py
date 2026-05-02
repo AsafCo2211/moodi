@@ -613,57 +613,69 @@ async def handle_audio_message(from_number: str, media_id: str, user):
 
 async def handle_ai_request(from_number: str, text: str, user):
     from utils.ai_assistant import parse_user_request
-    from utils.task_manager import create_task, delete_task_by_reference, update_task_datetime, get_upcoming_tasks
+    from utils.task_manager import (
+        create_task, get_upcoming_tasks,
+        delete_task_by_id, delete_task_by_reference,
+        update_task_by_id, update_task_datetime,
+    )
     from notifications.scheduler import schedule_reminder
 
     name = get_first_name(user)
-    result = parse_user_request(text, name)
-    action = result.get("action")
+    existing_tasks = get_upcoming_tasks(user["id"], days=365)
+    results = parse_user_request(text, name, existing_tasks=existing_tasks)
 
-    if action == "add_task":
-        task_id = create_task(
-            user["id"],
-            result["title"],
-            result.get("due_datetime"),
-            result.get("reminders", [])
-        )
-        for remind_at in result.get("reminders", []):
-            schedule_reminder(task_id, user["id"], from_number, result["title"], remind_at)
+    messages = []
+    for item in results:
+        action = item.get("action")
 
-        due_str = f" ב-{result['due_datetime']}" if result.get("due_datetime") else ""
-        reminders_str = f"\n{RLM}⏰ תזכורות הוגדרו" if result.get("reminders") else ""
-        send_text(from_number, f"{RLM}✅ נוסף: {result['title']}{due_str}{reminders_str}")
+        if action == "add_task":
+            task_id = create_task(
+                user["id"],
+                item["title"],
+                item.get("due_datetime"),
+                item.get("reminders", [])
+            )
+            for remind_at in item.get("reminders", []):
+                schedule_reminder(task_id, user["id"], from_number, item["title"], remind_at)
+            due_str = f" ב-{item['due_datetime']}" if item.get("due_datetime") else ""
+            reminders_str = f"\n{RLM}⏰ תזכורות הוגדרו" if item.get("reminders") else ""
+            messages.append(f"{RLM}✅ נוסף: {item['title']}{due_str}{reminders_str}")
 
-    elif action == "list_tasks":
-        tasks = get_upcoming_tasks(user["id"])
-        if not tasks:
-            send_text(from_number, f"{RLM}אין לך משימות אישיות קרובות 🎉")
+        elif action == "list_tasks":
+            tasks = get_upcoming_tasks(user["id"])
+            if not tasks:
+                messages.append(f"{RLM}אין לך משימות אישיות קרובות 🎉")
+            else:
+                msg = f"{RLM}📋 המשימות האישיות שלך:\n"
+                for t in tasks:
+                    due = f" | {t['due_datetime'][:16]}" if t['due_datetime'] else ""
+                    msg += f"{RLM}• {t['title']}{due}\n"
+                messages.append(msg)
+
+        elif action == "delete_task":
+            task_id = item.get("task_id")
+            if task_id:
+                success = delete_task_by_id(task_id, user["id"])
+            else:
+                success = delete_task_by_reference(user["id"], item.get("task_reference") or "")
+            messages.append(f"{RLM}✅ המשימה הוסרה" if success else f"{RLM}לא מצאתי משימה כזו")
+
+        elif action == "update_task":
+            task_id = item.get("task_id")
+            if task_id:
+                success = update_task_by_id(task_id, user["id"], item.get("title"), item.get("due_datetime"))
+            else:
+                success = update_task_datetime(user["id"], item.get("task_reference") or "", item.get("due_datetime"))
+            messages.append(f"{RLM}✅ המשימה עודכנה" if success else f"{RLM}לא מצאתי משימה כזו")
+
         else:
-            msg = f"{RLM}📋 המשימות האישיות שלך:\n\n"
-            for t in tasks:
-                due = f" | {t['due_datetime'][:16]}" if t['due_datetime'] else ""
-                msg += f"{RLM}• {t['title']}{due}\n"
-            send_text(from_number, msg)
+            messages.append(
+                f"{RLM}לצערי, אני יכול לעזור רק עם ניהול משימות ותזכורות אישיות 😊\n"
+                f"{RLM}לדוגמה: ״תור לספר מחר בשעה 11״ או ״תזכיר לי על X ב-Y״"
+            )
 
-    elif action == "delete_task":
-        success = delete_task_by_reference(user["id"], result.get("task_reference", ""))
-        if success:
-            send_text(from_number, f"{RLM}✅ המשימה הוסרה")
-        else:
-            send_text(from_number, f"{RLM}לא מצאתי משימה כזו")
-
-    elif action == "update_task":
-        success = update_task_datetime(user["id"], result.get("task_reference", ""), result.get("due_datetime"))
-        if success:
-            send_text(from_number, f"{RLM}✅ המשימה עודכנה")
-        else:
-            send_text(from_number, f"{RLM}לא מצאתי משימה כזו")
-
-    else:
-        send_text(from_number,
-            f"{RLM}לצערי, אני יכול לעזור רק עם ניהול משימות ותזכורות אישיות 😊\n"
-            f"{RLM}לדוגמה: ״תור לספר מחר בשעה 11״ או ״תזכיר לי על X ב-Y״"
-        )
+    if messages:
+        send_text(from_number, "\n\n".join(messages))
 
     send_buttons(from_number, f"{RLM}מה עוד?", [
         {"id": "back_main", "title": "⬅️ תפריט ראשי"}

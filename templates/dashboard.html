@@ -422,6 +422,124 @@
       .day-dot { width: 6px; height: 6px; }
       .tab { padding: 13px 12px; font-size: 13px; }
     }
+
+    /* ─── Personal task cards ─── */
+    .task-card {
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      padding: 14px 18px;
+      margin-bottom: 10px;
+      position: relative;
+    }
+    .task-title { font-size: 15px; font-weight: 600; color: #1e293b; margin-bottom: 8px; padding-left: 36px; }
+    .task-due { margin-bottom: 4px; }
+    .task-reminders { margin-top: 6px; }
+    .task-reminder-item { font-size: 12px; color: #94a3b8; }
+
+    .task-menu-btn {
+      position: absolute;
+      top: 12px;
+      left: 14px;
+      background: none;
+      border: none;
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      color: #94a3b8;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+    .task-menu-btn:hover { background: #f1f5f9; }
+
+    .task-dropdown {
+      position: absolute;
+      top: 40px;
+      left: 10px;
+      background: #fff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.10);
+      z-index: 20;
+      min-width: 130px;
+      overflow: hidden;
+      display: none;
+    }
+    .task-dropdown.open { display: block; }
+    .task-dropdown-item {
+      display: block;
+      width: 100%;
+      padding: 10px 14px;
+      font-size: 14px;
+      cursor: pointer;
+      text-align: right;
+      border: none;
+      background: none;
+      color: #1e293b;
+      font-family: inherit;
+    }
+    .task-dropdown-item:hover { background: #f8fafc; }
+    .task-dropdown-item.danger { color: #dc2626; }
+
+    /* ─── Edit task modal ─── */
+    #task-edit-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(15,23,42,0.7);
+      z-index: 100;
+      align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    #task-edit-overlay.open { display: flex; }
+    .task-edit-card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 28px 24px;
+      width: 100%;
+      max-width: 380px;
+    }
+    .task-edit-heading { font-size: 17px; font-weight: 700; color: #1e293b; margin-bottom: 18px; }
+    .task-edit-label { font-size: 13px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block; }
+    .task-edit-input {
+      width: 100%;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      margin-bottom: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+    .task-edit-input:focus { border-color: #2563eb; }
+    .task-edit-actions { display: flex; gap: 10px; }
+    .btn-primary {
+      flex: 1;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 11px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-secondary {
+      flex: 1;
+      background: #f1f5f9;
+      color: #64748b;
+      border: none;
+      border-radius: 10px;
+      padding: 11px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
   </style>
 </head>
 <body>
@@ -443,6 +561,7 @@
     <div class="tab active" data-tab="calendar" onclick="switchTab('calendar', this)">📅 לוח שנה</div>
     <div class="tab" data-tab="courses"  onclick="switchTab('courses', this)">קורסים</div>
     <div class="tab" data-tab="assignments" onclick="switchTab('assignments', this)">מטלות</div>
+    <div class="tab" data-tab="tasks" onclick="switchTab('tasks', this)">✅ משימות אישיות</div>
   </div>
 
   <!-- Content -->
@@ -473,6 +592,11 @@
       <div id="assignments-list"></div>
     </div>
 
+    <!-- Personal tasks tab -->
+    <div id="panel-tasks" class="tab-panel">
+      <div id="personal-tasks-list"></div>
+    </div>
+
   </div>
 
   <!-- Overlays -->
@@ -489,6 +613,21 @@
       <div class="logout-icon">👋</div>
       <div class="logout-title">סגרת את הסשן</div>
       <div class="logout-msg">ניתן לסגור את הדפדפן.</div>
+    </div>
+  </div>
+
+  <!-- Edit task modal -->
+  <div id="task-edit-overlay">
+    <div class="task-edit-card">
+      <div class="task-edit-heading">✏️ עריכת משימה</div>
+      <label class="task-edit-label">כותרת</label>
+      <input type="text" id="edit-task-title" class="task-edit-input" placeholder="שם המשימה" dir="rtl">
+      <label class="task-edit-label">תאריך ושעה</label>
+      <input type="datetime-local" id="edit-task-due" class="task-edit-input">
+      <div class="task-edit-actions">
+        <button class="btn-primary" onclick="savePersonalTask()">שמירה</button>
+        <button class="btn-secondary" onclick="closeEditModal()">ביטול</button>
+      </div>
     </div>
   </div>
 
@@ -534,6 +673,7 @@
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
       el.classList.add('active');
       document.getElementById('panel-' + tabName).classList.add('active');
+      if (tabName === 'tasks') loadPersonalTasks();
     }
 
     function skeletonRows(n) {
@@ -821,6 +961,103 @@
       } catch (e) {
         return false;
       }
+    }
+
+    // ─── Personal tasks ───
+    let personalTasksMap = {};
+    let editingTaskId    = null;
+
+    async function loadPersonalTasks() {
+      const el = document.getElementById('personal-tasks-list');
+      el.innerHTML = skeletonRows(3);
+      const res = await fetch(`/api/dashboard/personal-tasks-full?phone=${encodeURIComponent(phone)}&code=${encodeURIComponent(code)}`);
+      if (res.status === 401) { showExpired(); return; }
+      const tasks = await res.json();
+      personalTasksMap = {};
+      tasks.forEach(t => { personalTasksMap[t.id] = t; });
+      if (!tasks.length) {
+        el.innerHTML = `<div class="empty"><div class="empty-icon">🎉</div>אין משימות אישיות פתוחות</div>`;
+        return;
+      }
+      el.innerHTML = tasks.map(renderTaskCard).join('');
+    }
+
+    function renderTaskCard(t) {
+      const remindersHtml = (t.reminders || []).length
+        ? `<div class="task-reminders">${(t.reminders || []).map(r => {
+            const dt = new Date(r.remind_at.replace(' ', 'T'));
+            const d  = dt.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
+            const tm = dt.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+            return `<div class="task-reminder-item">⏰ ${d} ${tm}</div>`;
+          }).join('')}</div>`
+        : '';
+      return `
+        <div class="task-card" id="task-card-${t.id}">
+          <button class="task-menu-btn" onclick="toggleTaskMenu(${t.id}, event)">⋮</button>
+          <div class="task-dropdown" id="task-menu-${t.id}">
+            <button class="task-dropdown-item" onclick="openEditModal(${t.id})">✏️ עריכה</button>
+            <button class="task-dropdown-item danger" onclick="deletePersonalTask(${t.id})">🗑️ מחיקה</button>
+          </div>
+          <div class="task-title">${t.title}</div>
+          <div class="task-due">${dueDateChip(t.due_datetime, 'open')}</div>
+          ${remindersHtml}
+        </div>`;
+    }
+
+    function toggleTaskMenu(taskId, event) {
+      event.stopPropagation();
+      const menu   = document.getElementById('task-menu-' + taskId);
+      const isOpen = menu.classList.contains('open');
+      document.querySelectorAll('.task-dropdown').forEach(m => m.classList.remove('open'));
+      if (!isOpen) menu.classList.add('open');
+    }
+
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.task-dropdown').forEach(m => m.classList.remove('open'));
+    });
+
+    async function deletePersonalTask(taskId) {
+      document.querySelectorAll('.task-dropdown').forEach(m => m.classList.remove('open'));
+      if (!confirm('למחוק את המשימה?')) return;
+      const res = await fetch('/api/dashboard/personal-tasks/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, code, task_id: taskId }),
+      });
+      if (res.status === 401) { showExpired(); return; }
+      loadPersonalTasks();
+      if (await fetchPersonalTasks()) renderCalendar();
+    }
+
+    function openEditModal(taskId) {
+      document.querySelectorAll('.task-dropdown').forEach(m => m.classList.remove('open'));
+      editingTaskId = taskId;
+      const t = personalTasksMap[taskId];
+      document.getElementById('edit-task-title').value = t.title;
+      document.getElementById('edit-task-due').value = t.due_datetime
+        ? t.due_datetime.slice(0, 16).replace(' ', 'T') : '';
+      document.getElementById('task-edit-overlay').classList.add('open');
+    }
+
+    function closeEditModal() {
+      document.getElementById('task-edit-overlay').classList.remove('open');
+      editingTaskId = null;
+    }
+
+    async function savePersonalTask() {
+      const title = document.getElementById('edit-task-title').value.trim();
+      if (!title) return;
+      const dueRaw     = document.getElementById('edit-task-due').value;
+      const due_datetime = dueRaw ? dueRaw.replace('T', ' ') : null;
+      const res = await fetch('/api/dashboard/personal-tasks/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, code, task_id: editingTaskId, title, due_datetime }),
+      });
+      if (res.status === 401) { showExpired(); return; }
+      closeEditModal();
+      loadPersonalTasks();
+      if (await fetchPersonalTasks()) renderCalendar();
     }
 
     // ─── Init ───
