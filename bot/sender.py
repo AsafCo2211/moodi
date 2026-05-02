@@ -54,18 +54,6 @@ def send_buttons(to: str, message: str, buttons: list):
     return response.json()
 
 
-def send_main_menu(to: str, name: str):
-    """שולח את התפריט הראשי"""
-    send_buttons(
-        to=to,
-        message=f"היי {name} 👋 מה תרצה לבדוק היום?",
-        buttons=[
-            {"id": "menu_assignments", "title": "📋 המטלות שלי"},
-            {"id": "menu_grades", "title": "🎓 ציונים אחרונים"},
-            {"id": "menu_today", "title": "📅 להגשה היום"},
-        ]
-    )
-
 def send_list(to: str, message: str, button_text: str, sections: list):
     """
     שולח תפריט רשימה אינטראקטיבי.

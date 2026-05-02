@@ -1,3 +1,4 @@
+import threading
 from bot.sender import send_text, send_buttons, send_list
 from database import get_connection
 from datetime import datetime
@@ -120,9 +121,24 @@ async def handle_message(from_number: str, msg_type: str, content: str):
                 (content.strip(), from_number),
             )
             conn.commit()
+            user_row = conn.execute(
+                "SELECT id FROM users WHERE phone_number = ?", (from_number,)
+            ).fetchone()
+            user_id = user_row["id"]
             conn.close()
-            send_text(from_number, f"{RLM}✅ התחברת בהצלחה! היי {first_name} 👋")
-            send_main_menu(from_number, first_name)
+
+            def _seed_and_welcome():
+                from moodle.poller import poll_user_on_demand
+                poll_user_on_demand(user_id, skip_notifications=True)
+                conn2 = get_connection()
+                conn2.execute("UPDATE assignments SET notified_new=1 WHERE user_id=?", (user_id,))
+                conn2.execute("UPDATE grades SET notified=1 WHERE user_id=?", (user_id,))
+                conn2.commit()
+                conn2.close()
+                send_text(from_number, f"{RLM}✅ התחברת בהצלחה! היי {first_name} 👋")
+                send_main_menu(from_number, first_name)
+
+            threading.Thread(target=_seed_and_welcome, daemon=True).start()
             return
 
         if not user:

@@ -1,5 +1,8 @@
 import sqlite3
 from config import DATABASE_URL
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 def get_connection():
     conn = sqlite3.connect(DATABASE_URL)
@@ -92,7 +95,7 @@ def init_db():
         pass  # column already exists
 
     conn.close()
-    print("Database initialized successfully")
+    logger.info("Database initialized successfully")
 
 if __name__ == "__main__":
     init_db()

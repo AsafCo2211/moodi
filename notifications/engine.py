@@ -1,9 +1,12 @@
 from database import get_connection
 from bot.sender import send_text, send_buttons
 from datetime import datetime, date
+from utils.logger import get_logger
 import re
 
 RLM = "‏"
+
+logger = get_logger(__name__)
 
 
 def parse_max_grade(grade_range: str) -> float | None:
@@ -60,7 +63,7 @@ def send_new_assignment_notifications(user_id: int, phone_number: str):
             conn2.commit()
             conn2.close()
         except Exception as e:
-            print(f"[notifications] Error notifying new assignment {row['moodle_assign_id']} for user {user_id}: {e}")
+            logger.error(f"Error notifying new assignment {row['moodle_assign_id']} for user {user_id}: {e}")
 
 
 def send_new_grade_notifications(user_id: int, phone_number: str):
@@ -98,7 +101,7 @@ def send_new_grade_notifications(user_id: int, phone_number: str):
             conn2.commit()
             conn2.close()
         except Exception as e:
-            print(f"[notifications] Error notifying grade for user {user_id}: {e}")
+            logger.error(f"Error notifying grade for user {user_id}: {e}")
 
 
 def send_morning_summary():
@@ -148,7 +151,7 @@ def send_morning_summary():
             conn2.commit()
             conn2.close()
         except Exception as e:
-            print(f"[notifications] Error in morning summary for user {user['user_id']}: {e}")
+            logger.error(f"Error in morning summary for user {user['user_id']}: {e}")
 
 
 def send_evening_reminder():
@@ -197,7 +200,7 @@ def send_evening_reminder():
             conn2.commit()
             conn2.close()
         except Exception as e:
-            print(f"[notifications] Error in evening reminder for user {user['user_id']}: {e}")
+            logger.error(f"Error in evening reminder for user {user['user_id']}: {e}")
 
 
 def reset_daily_flags():
@@ -209,4 +212,4 @@ def reset_daily_flags():
     )
     conn.commit()
     conn.close()
-    print(f"[reset] Daily notification flags reset at {datetime.now()}")
+    logger.info(f"Daily notification flags reset at {datetime.now()}")

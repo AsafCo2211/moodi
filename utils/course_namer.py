@@ -1,6 +1,9 @@
 from google import genai
 from config import GEMINI_API_KEY
 from database import get_connection
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -61,6 +64,5 @@ def _shorten_with_gemini(full_name: str) -> str:
         return short
         
     except Exception as e:
-        print(f"DEBUG - Gemini Error: {e}")
-        # Fallback בסיסי אם ה-API נכשל
+        logger.error(f"Gemini shortening failed: {e}")
         return full_name[:23] + "…" if len(full_name) > 24 else full_name

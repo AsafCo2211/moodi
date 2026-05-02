@@ -3,6 +3,9 @@ from datetime import datetime
 from database import get_connection
 from moodle.client import get_assignments, get_grades_table
 from moodle.parser import parse_assignments, parse_grades_table
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def seed_user_courses_if_empty(cursor, user_id: int, wstoken: str, moodle_user_id: int):
@@ -26,7 +29,7 @@ def seed_user_courses_if_empty(cursor, user_id: int, wstoken: str, moodle_user_i
             VALUES (?, ?, ?)
         """, (user_id, c["id"], c["name"]))
 
-    print(f"[seed] Inserted {len(courses)} courses for user {user_id}")
+    logger.info(f"Inserted {len(courses)} courses for user {user_id}")
 
     from moodle.client import call_moodle
     try:
@@ -37,7 +40,7 @@ def seed_user_courses_if_empty(cursor, user_id: int, wstoken: str, moodle_user_i
             "UPDATE users SET first_name = ? WHERE id = ?",
             (first_name, user_id)
         )
-        print(f"  [seed] Saved name: {first_name}")
+        logger.debug(f"Saved name: {first_name}")
     except Exception:
         pass
 
@@ -77,7 +80,7 @@ def sync_submission_statuses(cursor, user_id: int, wstoken: str):
         AND is_submitted = 0
     """, (user_id,)).fetchall()
 
-    print(f"  → Checking submission status for {len(overdue)} unsubmitted assignments")
+    logger.debug(f"Checking submission status for {len(overdue)} unsubmitted assignments")
 
     for row in overdue:
         status = get_submission_status(wstoken, row["moodle_assign_id"])
@@ -86,10 +89,10 @@ def sync_submission_statuses(cursor, user_id: int, wstoken: str):
                 UPDATE assignments SET is_submitted = 1
                 WHERE user_id = ? AND moodle_assign_id = ?
             """, (user_id, row["moodle_assign_id"]))
-            print(f"  [submit] Marked assign {row['moodle_assign_id']} as submitted")
+            logger.info(f"Marked assign {row['moodle_assign_id']} as submitted")
 
 
-def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list, course_map: dict, phone_number: str = ""):
+def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list, course_map: dict, phone_number: str = "", skip_notifications: bool = False):
     """
     סורק מטלות וציונים עבור משתמש אחד.
     course_map: {course_id: course_name}
@@ -98,7 +101,7 @@ def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list,
     cursor = conn.cursor()
 
     try:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Polling user {user_id} — {len(course_ids)} courses")
+        logger.info(f"Polling user {user_id} — {len(course_ids)} courses")
         seed_user_courses_if_empty(cursor, user_id, wstoken, moodle_user_id)
         conn.commit()
         if not course_ids:
@@ -111,7 +114,7 @@ def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list,
         # --- מטלות ---
         raw_assignments = get_assignments(wstoken, course_ids)
         assignments = parse_assignments(raw_assignments)
-        print(f"  → {len(assignments)} assignments fetched")
+        logger.debug(f"{len(assignments)} assignments fetched")
 
         for assign in assignments:
             try:
@@ -136,24 +139,25 @@ def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list,
                 raw_table = get_grades_table(wstoken, moodle_user_id, course_id)
                 grades = parse_grades_table(raw_table, course_name)
                 save_grades(cursor, user_id, grades)
-                print(f"  → {course_name[:30]}: {len(grades)} grades")
+                logger.debug(f"{course_name[:30]}: {len(grades)} grades")
             except Exception as e:
-                print(f"  Skipping grades for {course_name}: {e}")
+                logger.warning(f"Skipping grades for {course_name}: {e}")
                 continue
 
         sync_submission_statuses(cursor, user_id, wstoken)
         conn.commit()
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Polled user {user_id} successfully")
+        logger.info(f"Polled user {user_id} successfully")
 
-        try:
-            from notifications.engine import send_new_assignment_notifications, send_new_grade_notifications
-            send_new_assignment_notifications(user_id, phone_number)
-            send_new_grade_notifications(user_id, phone_number)
-        except Exception as e:
-            print(f"[notifications] Error sending notifications for user {user_id}: {e}")
+        if not skip_notifications:
+            try:
+                from notifications.engine import send_new_assignment_notifications, send_new_grade_notifications
+                send_new_assignment_notifications(user_id, phone_number)
+                send_new_grade_notifications(user_id, phone_number)
+            except Exception as e:
+                logger.error(f"Error sending notifications for user {user_id}: {e}")
 
     except Exception as e:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Error polling user {user_id}: {e}")
+        logger.error(f"Error polling user {user_id}: {e}")
         conn.rollback()
         error_str = str(e).lower()
         if "invalidtoken" in error_str or "invalid token" in error_str:
@@ -175,7 +179,7 @@ def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list,
                         f"{RLM}https://moodi.aitoolhub.blog/login?phone={user['phone_number']}"
                     )
             except Exception as notify_err:
-                print(f"[token-expired] Failed to notify user {user_id}: {notify_err}")
+                logger.error(f"Failed to notify user {user_id} about token expiry: {notify_err}")
 
     finally:
         conn.close()
@@ -186,7 +190,7 @@ def poll_all_users():
     סורק את כל המשתמשים הפעילים במערכת.
     זו הפונקציה שה-Cron job יקרא לה כל 5 דקות.
     """
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Starting scheduled poll for all users")
+    logger.info("Starting scheduled poll for all users")
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -238,15 +242,11 @@ def poll_all_users():
             phone_number=data["phone_number"]
         )
 
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Scheduled poll complete")
+    logger.info("Scheduled poll complete")
 
 
-def poll_user_on_demand(user_id: int):
-    """
-    Polls a single user immediately.
-    Called as a background task when a user sends a message.
-    Fetches their courses from user_courses table and polls assignments + grades.
-    """
+def poll_user_on_demand(user_id: int, skip_notifications: bool = False):
+    # Reserved for future on-demand polling when user opens menu
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -281,4 +281,4 @@ def poll_user_on_demand(user_id: int):
     moodle_user_id = rows[0]["moodle_user_id"]
     phone_number = user["phone_number"]
 
-    poll_user(user_id, moodle_user_id, wstoken, course_ids, course_map, phone_number)
+    poll_user(user_id, moodle_user_id, wstoken, course_ids, course_map, phone_number, skip_notifications=skip_notifications)
