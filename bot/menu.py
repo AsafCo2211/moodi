@@ -235,7 +235,9 @@ async def show_course_selection(to: str, user_id: int):
     courses = conn.execute("""
     SELECT DISTINCT uc.course_id, uc.course_name
     FROM user_courses uc
-    WHERE uc.user_id = ?
+    LEFT JOIN user_course_settings ucs
+      ON uc.user_id = ucs.user_id AND uc.course_id = ucs.course_id
+    WHERE uc.user_id = ? AND COALESCE(ucs.is_active, 1) = 1
     AND EXISTS (
         SELECT 1 FROM assignments a
         WHERE a.user_id = uc.user_id
@@ -428,7 +430,9 @@ async def show_grades(to: str, user_id: int):
     courses = conn.execute("""
         SELECT DISTINCT uc.course_id, uc.course_name
         FROM user_courses uc
-        WHERE uc.user_id = ?
+        LEFT JOIN user_course_settings ucs
+          ON uc.user_id = ucs.user_id AND uc.course_id = ucs.course_id
+        WHERE uc.user_id = ? AND COALESCE(ucs.is_active, 1) = 1
         AND EXISTS (
             SELECT 1 FROM grades g
             WHERE g.user_id = uc.user_id AND g.course_name = uc.course_name

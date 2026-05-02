@@ -212,7 +212,10 @@ def poll_all_users():
                uc.course_id, uc.course_name
         FROM users u
         JOIN user_courses uc ON u.id = uc.user_id
+        LEFT JOIN user_course_settings ucs
+          ON uc.user_id = ucs.user_id AND uc.course_id = ucs.course_id
         WHERE u.is_active = 1 AND u.wstoken IS NOT NULL
+          AND COALESCE(ucs.is_active, 1) = 1
     """).fetchall()
 
     conn.close()

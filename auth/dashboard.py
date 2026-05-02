@@ -145,6 +145,7 @@ async def get_assignments(phone: str, code: str):
         LEFT JOIN user_assignment_settings uas
           ON a.user_id = uas.user_id AND a.moodle_assign_id = uas.moodle_assign_id
         WHERE a.user_id = (SELECT id FROM users WHERE phone_number = ?)
+          AND a.is_submitted = 0
         ORDER BY
             CASE WHEN a.due_date IS NULL THEN 1 ELSE 0 END ASC,
             a.due_date ASC
@@ -171,6 +172,16 @@ async def update_assignment(body: UpdateAssignmentBody):
         "INSERT OR REPLACE INTO user_assignment_settings (user_id, moodle_assign_id, status) VALUES (?, ?, ?)",
         (user_id, body.moodle_assign_id, body.status),
     )
+    if body.status == "team_submitted":
+        conn.execute(
+            "UPDATE assignments SET is_submitted = 1 WHERE user_id = ? AND moodle_assign_id = ?",
+            (user_id, body.moodle_assign_id),
+        )
+    elif body.status == "open":
+        conn.execute(
+            "UPDATE assignments SET is_submitted = 0 WHERE user_id = ? AND moodle_assign_id = ?",
+            (user_id, body.moodle_assign_id),
+        )
     conn.commit()
     conn.close()
     logger.info(f"Assignment {body.moodle_assign_id} set to '{body.status}' for user {user_id}")
