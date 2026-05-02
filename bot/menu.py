@@ -722,19 +722,20 @@ async def handle_ai_request(from_number: str, text: str, user):
         elif action == "update_task":
             task_id = item.get("task_id")
             if task_id:
-                success = update_task_by_id(task_id, user["id"], item.get("title"), item.get("due_datetime"))
+                resolved_id = update_task_by_id(task_id, user["id"], item.get("title"), item.get("due_datetime"))
             else:
-                success = update_task_datetime(user["id"], item.get("task_reference") or "", item.get("due_datetime"))
-            if not success:
+                resolved_id = update_task_datetime(user["id"], item.get("task_reference") or "", item.get("due_datetime"))
+            if not resolved_id:
                 send_text(from_number, f"{RLM}לא מצאתי משימה תואמת. האם שמה נכון?")
                 continue
             reminders = item.get("reminders") or []
-            if reminders and task_id:
+            logger.debug(f"update_task resolved_id={resolved_id}, reminders={reminders}")
+            if reminders:
                 from utils.task_manager import add_reminders_to_task
                 from notifications.scheduler import schedule_reminder
-                add_reminders_to_task(task_id, user["id"], reminders)
+                add_reminders_to_task(resolved_id, user["id"], reminders)
                 for remind_at in reminders:
-                    schedule_reminder(task_id, user["id"], from_number,
+                    schedule_reminder(resolved_id, user["id"], from_number,
                                       item.get("title") or "תזכורת", remind_at)
             reminders_str = f"\n{RLM}⏰ תזכורות הוגדרו" if reminders else ""
             messages.append(f"{RLM}✅ המשימה עודכנה{reminders_str}")

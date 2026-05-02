@@ -44,9 +44,9 @@ def delete_task_by_reference(user_id: int, reference: str) -> bool:
     return True
 
 
-def update_task_datetime(user_id: int, reference: str, new_datetime: str) -> bool:
+def update_task_datetime(user_id: int, reference: str, new_datetime: str):
     if not reference:
-        return False
+        return None
     conn = get_connection()
     row = conn.execute(
         "SELECT id FROM personal_tasks WHERE user_id=? AND title LIKE ? AND status='open'",
@@ -54,14 +54,14 @@ def update_task_datetime(user_id: int, reference: str, new_datetime: str) -> boo
     ).fetchone()
     if not row:
         conn.close()
-        return False
+        return None
     conn.execute(
         "UPDATE personal_tasks SET due_datetime=? WHERE id=?",
         (new_datetime, row["id"])
     )
     conn.commit()
     conn.close()
-    return True
+    return row["id"]
 
 
 def get_upcoming_tasks(user_id: int, days: int = 7) -> list:
@@ -80,7 +80,7 @@ def get_upcoming_tasks(user_id: int, days: int = 7) -> list:
     return [dict(r) for r in rows]
 
 
-def update_task_by_id(task_id: int, user_id: int, title: str = None, due_datetime: str = None) -> bool:
+def update_task_by_id(task_id: int, user_id: int, title: str = None, due_datetime: str = None):
     conn = get_connection()
     row = conn.execute(
         "SELECT id FROM personal_tasks WHERE id=? AND user_id=? AND status='open'",
@@ -88,14 +88,14 @@ def update_task_by_id(task_id: int, user_id: int, title: str = None, due_datetim
     ).fetchone()
     if not row:
         conn.close()
-        return False
+        return None
     conn.execute(
         "UPDATE personal_tasks SET title=COALESCE(?,title), due_datetime=COALESCE(?,due_datetime) WHERE id=? AND user_id=?",
         (title, due_datetime, task_id, user_id)
     )
     conn.commit()
     conn.close()
-    return True
+    return task_id
 
 
 def delete_task_by_id(task_id: int, user_id: int) -> bool:
@@ -132,6 +132,7 @@ def add_reminders_to_task(task_id: int, user_id: int, reminder_times: list) -> b
             (task_id, user_id)
         )
         for remind_at in reminder_times:
+            logger.debug(f"Inserting reminder for task {task_id} at {remind_at}")
             conn.execute(
                 "INSERT INTO task_reminders (task_id, user_id, remind_at) VALUES (?, ?, ?)",
                 (task_id, user_id, remind_at)

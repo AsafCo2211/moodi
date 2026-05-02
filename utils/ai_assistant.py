@@ -46,6 +46,11 @@ User: "יש לי תור לספר ביום חמישי בשעה 11 תזכיר לי
 User: "תזיז את הספר לשעה 12"
 -> {{"actions":[{{"action":"update_task","title":null,"due_datetime":"2026-05-07 12:00","reminders":[],"task_id":3,"task_reference":"ספר","reason":null}}]}}
 
+When adding multiple reminders to the same task, return a SINGLE update_task action with ALL reminder times in the reminders array — do NOT split into multiple actions.
+
+User: "תשים תזכורת לתור לספר ב-9 וגם ב-10 בבוקר"
+-> {{"actions":[{{"action":"update_task","title":null,"due_datetime":null,"reminders":["2026-05-07 09:00","2026-05-07 10:00"],"task_id":3,"task_reference":"תור לספר","reason":null}}]}}
+
 User: "תוסיף תזכורת לתור לספר בשעה 9 בבוקר"
 -> {{"actions":[{{"action":"update_task","title":null,"due_datetime":null,"reminders":["2026-05-07 09:00"],"task_id":3,"task_reference":"תור לספר","reason":null}}]}}
 
