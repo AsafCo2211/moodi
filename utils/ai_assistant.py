@@ -100,6 +100,16 @@ def generate_status_report(first_name: str, assignments: list, personal_tasks: l
     israel_tz = timezone(timedelta(hours=3))
     today = datetime.now(israel_tz).strftime("%Y-%m-%d %H:%M")
 
+    assignments_json = json.dumps(
+        [{'name': a['assignment_name'], 'course': a['course_name'], 'due': a['due_date']}
+         for a in assignments],
+        ensure_ascii=False
+    )
+    personal_json = json.dumps(
+        [{'title': t['title'], 'due': t['due_datetime']} for t in personal_tasks],
+        ensure_ascii=False
+    )
+
     prompt = f"""You are Moodi, a personal assistant for Israeli students.
 Today is {today}. The user's name is {first_name}.
 
@@ -118,10 +128,10 @@ Use emojis for visual clarity.
 Every line MUST start with \\u200f.
 
 Moodle assignments this week:
-{json.dumps([{{'name': a['assignment_name'], 'course': a['course_name'], 'due': a['due_date']}} for a in assignments], ensure_ascii=False)}
+{assignments_json}
 
 Personal tasks this week:
-{json.dumps([{{'title': t['title'], 'due': t['due_datetime']}} for t in personal_tasks], ensure_ascii=False)}
+{personal_json}
 """
 
     try:
