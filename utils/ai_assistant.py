@@ -139,7 +139,8 @@ Personal tasks this week:
             model="gemini-2.5-flash",
             contents=prompt
         )
-        return response.text
+        text = response.text.replace('\\u200f', '‏')
+        return text
     except Exception as e:
         logger.error(f"Status report generation failed: {e}")
         return f"{RLM}לא הצלחתי ליצור דוח מצב כרגע, נסה שוב מאוחר יותר"
