@@ -116,6 +116,30 @@ def delete_task_by_id(task_id: int, user_id: int) -> bool:
     return True
 
 
+def add_reminders_to_task(task_id: int, user_id: int, reminder_times: list) -> bool:
+    conn = get_connection()
+    try:
+        task = conn.execute(
+            "SELECT id FROM personal_tasks WHERE id=? AND user_id=? AND status='open'",
+            (task_id, user_id)
+        ).fetchone()
+        if not task:
+            return False
+        for remind_at in reminder_times:
+            conn.execute(
+                "INSERT INTO task_reminders (task_id, user_id, remind_at) VALUES (?, ?, ?)",
+                (task_id, user_id, remind_at)
+            )
+        conn.commit()
+        logger.info(f"Added {len(reminder_times)} reminders to task {task_id}")
+        return True
+    except Exception as e:
+        logger.error(f"add_reminders_to_task failed: {e}")
+        return False
+    finally:
+        conn.close()
+
+
 def load_pending_reminders() -> list:
     conn = get_connection()
     rows = conn.execute("""

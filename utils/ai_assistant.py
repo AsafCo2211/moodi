@@ -46,6 +46,9 @@ User: "יש לי תור לספר ביום חמישי בשעה 11 תזכיר לי
 User: "תזיז את הספר לשעה 12"
 -> {{"actions":[{{"action":"update_task","title":null,"due_datetime":"2026-05-07 12:00","reminders":[],"task_id":3,"task_reference":"ספר","reason":null}}]}}
 
+User: "תוסיף תזכורת לתור לספר בשעה 9 בבוקר"
+-> {{"actions":[{{"action":"update_task","title":null,"due_datetime":null,"reminders":["2026-05-07 09:00"],"task_id":3,"task_reference":"תור לספר","reason":null}}]}}
+
 User: "מה המשימות שלי?"
 -> {{"actions":[{{"action":"list_tasks","title":null,"due_datetime":null,"reminders":[],"task_id":null,"task_reference":null,"reason":null}}]}}
 

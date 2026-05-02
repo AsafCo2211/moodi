@@ -4,6 +4,9 @@ from database import get_connection
 from datetime import datetime
 import re
 from utils.course_namer import get_short_name
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 RLM = "\u200f"
 
@@ -665,7 +668,17 @@ async def handle_ai_request(from_number: str, text: str, user):
 
     name = get_first_name(user)
     existing_tasks = get_upcoming_tasks(user["id"], days=365)
-    results = parse_user_request(text, name, existing_tasks=existing_tasks)
+
+    try:
+        results = parse_user_request(text, name, existing_tasks=existing_tasks)
+    except Exception as e:
+        logger.error(f"AI parse failed: {e}")
+        send_text(from_number, f"{RLM}מצטער, לא הצלחתי לעבד את הבקשה כרגע. נסה שוב מאוחר יותר 🙏")
+        return
+
+    if not results:
+        send_text(from_number, f"{RLM}מצטער, לא הצלחתי להבין את הבקשה. נסה לנסח אחרת 🙏")
+        return
 
     messages = []
     for item in results:
@@ -701,7 +714,10 @@ async def handle_ai_request(from_number: str, text: str, user):
                 success = delete_task_by_id(task_id, user["id"])
             else:
                 success = delete_task_by_reference(user["id"], item.get("task_reference") or "")
-            messages.append(f"{RLM}✅ המשימה הוסרה" if success else f"{RLM}לא מצאתי משימה כזו")
+            if not success:
+                send_text(from_number, f"{RLM}לא מצאתי משימה תואמת. האם שמה נכון?")
+                continue
+            messages.append(f"{RLM}✅ המשימה הוסרה")
 
         elif action == "update_task":
             task_id = item.get("task_id")
@@ -709,7 +725,19 @@ async def handle_ai_request(from_number: str, text: str, user):
                 success = update_task_by_id(task_id, user["id"], item.get("title"), item.get("due_datetime"))
             else:
                 success = update_task_datetime(user["id"], item.get("task_reference") or "", item.get("due_datetime"))
-            messages.append(f"{RLM}✅ המשימה עודכנה" if success else f"{RLM}לא מצאתי משימה כזו")
+            if not success:
+                send_text(from_number, f"{RLM}לא מצאתי משימה תואמת. האם שמה נכון?")
+                continue
+            reminders = item.get("reminders") or []
+            if reminders and task_id:
+                from utils.task_manager import add_reminders_to_task
+                from notifications.scheduler import schedule_reminder
+                add_reminders_to_task(task_id, user["id"], reminders)
+                for remind_at in reminders:
+                    schedule_reminder(task_id, user["id"], from_number,
+                                      item.get("title") or "תזכורת", remind_at)
+            reminders_str = f"\n{RLM}⏰ תזכורות הוגדרו" if reminders else ""
+            messages.append(f"{RLM}✅ המשימה עודכנה{reminders_str}")
 
         else:
             messages.append(
