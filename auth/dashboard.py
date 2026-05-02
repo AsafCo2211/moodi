@@ -145,7 +145,9 @@ async def get_assignments(phone: str, code: str):
         LEFT JOIN user_assignment_settings uas
           ON a.user_id = uas.user_id AND a.moodle_assign_id = uas.moodle_assign_id
         WHERE a.user_id = (SELECT id FROM users WHERE phone_number = ?)
-        ORDER BY a.due_date ASC
+        ORDER BY
+            CASE WHEN a.due_date IS NULL THEN 1 ELSE 0 END ASC,
+            a.due_date ASC
         """,
         (phone,),
     ).fetchall()
