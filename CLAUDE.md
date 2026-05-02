@@ -79,7 +79,7 @@ notifications/
   scheduler.py           APScheduler — polls 07:00-23:59 every 5 min, morning summary at 10:00, evening reminder at 20:00, flag reset at 01:00
 
 auth/
-  webview.py             (stub) Auth webview for token acquisition
+  webview.py             Registration endpoint: GET /login serves HTML page, POST /auth/login authenticates against BGU token.php, returns 6-digit one-time code
   token_store.py         (stub) Encrypted wstoken storage
 
 utils/
@@ -101,6 +101,7 @@ utils/
 - `grades` — per-user grades with `grade`, `grade_range`, `notified`, `detected_at`
 - `user_courses` — maps users to their enrolled Moodle courses
 - `courses_cache` — caches Gemini-shortened course names by `moodle_course_id`
+- `pending_registrations` — temporary registration codes with wstoken, 10-minute expiry
 
 ## WhatsApp API Constraints
 
