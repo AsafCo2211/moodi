@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Request, HTTPException
 from config import WHATSAPP_VERIFY_TOKEN
 from bot.menu import handle_message
+from utils.logger import get_logger
 
+logger = get_logger(__name__)
 router = APIRouter()
 
 
@@ -29,42 +31,42 @@ async def receive_message(request: Request):
     אנחנו מוציאים את המידע הרלוונטי ומעבירים לתפריט.
     """
     body = await request.json()
-    print("WEBHOOK BODY:", body)
 
     try:
         entry = body["entry"][0]
         changes = entry["changes"][0]
         value = changes["value"]
 
-        # אם אין הודעות — התעלם
         if "messages" not in value:
+            if "statuses" in value:
+                status_obj = value["statuses"][0]
+                logger.debug(f"STATUS {status_obj.get('status')} for {status_obj.get('recipient_id')}")
             return {"status": "ok"}
 
         message = value["messages"][0]
         from_number = message["from"]
         msg_type = message["type"]
 
-        # הודעת טקסט רגילה
         if msg_type == "text":
             text = message["text"]["body"]
+            logger.info(f"MSG from {from_number}: text = '{text[:50]}'")
             await handle_message(from_number, "text", text)
 
-        # לחיצה על כפתור
         elif msg_type == "interactive":
             interactive = message["interactive"]
             interactive_type = interactive.get("type")
 
             if interactive_type == "button_reply":
                 button_id = interactive["button_reply"]["id"]
+                logger.info(f"MSG from {from_number}: button = {button_id}")
                 await handle_message(from_number, "button", button_id)
 
             elif interactive_type == "list_reply":
                 list_id = interactive["list_reply"]["id"]
+                logger.info(f"MSG from {from_number}: list = {list_id}")
                 await handle_message(from_number, "list", list_id)
 
     except Exception as e:
-        print("ERROR:", e)
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Webhook error: {e}", exc_info=True)
 
     return {"status": "ok"}
