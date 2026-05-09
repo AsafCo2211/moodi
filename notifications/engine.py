@@ -93,9 +93,6 @@ def send_due_date_changed_notifications(user_id: int, phone_number: str):
                 f"{due_line}"
             )
             send_text(phone_number, message)
-            send_buttons(phone_number, f"{RLM}מה תרצה לעשות?", [
-                {"id": "back_main", "title": "⬅️ תפריט ראשי"}
-            ])
 
             conn2 = get_connection()
             conn2.execute(
@@ -131,9 +128,6 @@ def send_new_grade_notifications(user_id: int, phone_number: str):
                 f"{RLM}{row['item_name']}: {grade_display}"
             )
             send_text(phone_number, message)
-            send_buttons(phone_number, f"{RLM}מה תרצה לעשות?", [
-                {"id": "back_main", "title": "⬅️ תפריט ראשי"}
-            ])
 
             conn2 = get_connection()
             conn2.execute(
@@ -180,9 +174,6 @@ def send_morning_summary():
                 + f"{RLM}שיהיה לנו יום יעיל ואפקטיבי, וכמובן שמוודי פה לכל שאלה 😄"
             )
             send_text(user["phone_number"], message)
-            send_buttons(user["phone_number"], f"{RLM}המטלות שלי", [
-                {"id": "back_main", "title": "⬅️ תפריט ראשי"}
-            ])
 
             conn2 = get_connection()
             conn2.execute(
@@ -229,9 +220,6 @@ def send_evening_reminder():
                 + f"{RLM}מזכיר שההגשה של המטלות האלו היא להיום."
             )
             send_text(user["phone_number"], message)
-            send_buttons(user["phone_number"], f"{RLM}המטלות שלי", [
-                {"id": "back_main", "title": "⬅️ תפריט ראשי"}
-            ])
 
             conn2 = get_connection()
             conn2.execute(
