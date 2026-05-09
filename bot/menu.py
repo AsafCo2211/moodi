@@ -135,7 +135,7 @@ async def handle_message(from_number: str, msg_type: str, content: str):
             def _seed_and_welcome():
                 poll_user_on_demand(user_id, skip_notifications=True)
                 conn2 = get_connection()
-                conn2.execute("UPDATE assignments SET notified_new=1 WHERE user_id=?", (user_id,))
+                conn2.execute("UPDATE assignments SET notified_new=1, notified_due_changed=1 WHERE user_id=?", (user_id,))
                 conn2.execute("UPDATE grades SET notified=1 WHERE user_id=?", (user_id,))
                 conn2.commit()
                 conn2.close()
