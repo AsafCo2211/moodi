@@ -1,5 +1,5 @@
 from database import get_connection
-from bot.sender import send_text, send_buttons
+from bot.sender import send_text
 from datetime import datetime, date
 from utils.logger import get_logger
 import re
@@ -51,9 +51,6 @@ def send_new_assignment_notifications(user_id: int, phone_number: str):
                 f"{due_line}"
             )
             send_text(phone_number, message)
-            send_buttons(phone_number, f"{RLM}מה תרצה לעשות?", [
-                {"id": "back_main", "title": "⬅️ תפריט ראשי"}
-            ])
 
             conn2 = get_connection()
             conn2.execute(
