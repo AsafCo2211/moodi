@@ -212,6 +212,7 @@
       grid-template-columns: repeat(7, 1fr);
       gap: 2px;
       direction: ltr;
+      overflow: hidden;
     }
 
     .cal-day-name {
@@ -220,10 +221,11 @@
       font-weight: 700;
       color: #94a3b8;
       padding: 4px 0 8px;
+      min-width: 0;
     }
 
     .cal-day {
-      min-height: 60px;
+      min-height: 70px;
       border-radius: 8px;
       padding: 4px 3px;
       cursor: pointer;
@@ -231,6 +233,8 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+      min-width: 0;
+      overflow: hidden;
     }
     .cal-day:hover:not(.other-month) { background: #f8fafc; }
     .cal-day.other-month { opacity: 0.25; cursor: default; pointer-events: none; }
@@ -259,7 +263,7 @@
     .day-chip {
       display: block;
       border-radius: 4px;
-      font-size: 10px;
+      font-size: 9px;
       padding: 1px 4px;
       max-width: 100%;
       overflow: hidden;
@@ -503,9 +507,10 @@
       background: #fff;
       border-radius: 14px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-      padding: 14px 18px;
+      padding: 14px 52px 14px 18px;
       margin-bottom: 10px;
       position: relative;
+      overflow: visible;
     }
 
     /* Space on both sides: right for completion circle, left for ⋮ menu */
