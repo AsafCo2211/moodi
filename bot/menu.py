@@ -1,17 +1,42 @@
+"""
+ניתוב הודעות WhatsApp — הלב של הבוט.
+מקבל כל הודעה נכנסת ומפנה אותה להנדלר המתאים.
+פונקציות עזר משותפות: get_user, get_first_name, send_main_menu.
+"""
+
 import threading
+import re
+
 from bot.sender import send_text, send_buttons, send_list
 from database import get_connection
-from datetime import datetime
-import re
-from utils.course_namer import get_short_name
+from moodle.poller import poll_user_on_demand
 from utils.logger import get_logger
+from bot.handlers.assignments import show_course_selection, show_assignments
+from bot.handlers.grades import show_grades, show_grades_for_course
+from bot.handlers.upcoming import show_upcoming_menu, show_upcoming
+from bot.handlers.ai import handle_ai_request, handle_audio_message
+from bot.handlers.dashboard import send_dashboard_link, send_status_report
 
 logger = get_logger(__name__)
 
-RLM = "\u200f"
+RLM = "‏"
+
+GREETINGS = {
+    "היי", "הי", "שלום", "הלו", "מה קורה", "מה נשמע",
+    "בוקר טוב", "ערב טוב", "?", "מה", "ok", "אוקי"
+}
 
 
 def get_user(phone_number: str):
+    """
+    מחזיר את שורת המשתמש מה-DB לפי מספר טלפון.
+
+    Args:
+        phone_number: מספר הטלפון של המשתמש.
+
+    Returns:
+        שורת sqlite3.Row של המשתמש, או None אם לא נמצא.
+    """
     conn = get_connection()
     user = conn.execute(
         "SELECT * FROM users WHERE phone_number = ?", (phone_number,)
@@ -21,78 +46,55 @@ def get_user(phone_number: str):
 
 
 def get_first_name(user) -> str:
+    """
+    מחלץ את השם הפרטי מתוך שורת משתמש.
+
+    Args:
+        user: שורת sqlite3.Row של המשתמש, או None.
+
+    Returns:
+        השם הפרטי כמחרוזת, או מחרוזת ריקה אם לא קיים.
+    """
     if user and user["first_name"]:
         return user["first_name"]
     return ""
 
 
-def assignment_emoji(due_date_str: str) -> str:
-    if not due_date_str:
-        return "⚪"
-    due = datetime.strptime(due_date_str, '%Y-%m-%d %H:%M:%S')
-    now = datetime.now()
-    diff = due - now
-    if diff.total_seconds() < 0:
-        return "⚫"
-    elif diff.days < 1:
-        return "🔴"
-    elif diff.days < 3:
-        return "🟡"
-    else:
-        return "🟢"
+def send_main_menu(to: str, name: str):
+    """
+    שולח את התפריט הראשי למשתמש.
 
-
-def format_due_date(due_date_str: str) -> str:
-    if not due_date_str:
-        return "ללא תאריך"
-    due = datetime.strptime(due_date_str, '%Y-%m-%d %H:%M:%S')
-    now = datetime.now()
-    diff = due - now
-    if diff.days == 0:
-        return f"היום | {due.strftime('%H:%M')}"
-    elif diff.days == 1:
-        return f"מחר | {due.strftime('%H:%M')}"
-    else:
-        return f"{due.strftime('%d/%m/%y')} | {due.strftime('%H:%M')}"
-
-
-def format_assignment(a) -> str:
-    emoji = assignment_emoji(a["due_date"])
-    due_str = format_due_date(a["due_date"])
-
-    # ניקוי רווחים מיותרים מהדאטה של Moodle
-    course_name = a['course_name'].strip()
-    assignment_name = a['assignment_name'].strip()
-
-    return (
-        f"{RLM}• - - - - - - - - - - - - - - - - - - - - •\n"
-        ##f"{RLM}───────────────\n"
-        f"{RLM}📖 *{course_name}*\n\n"
-        ##f"{RLM}📖 `({a['course_name']})`\n\n"
-        #f"{RLM}{emoji} *בתאריך*: {due_str}\n\n"
-        f"{RLM}📋 *מטלה*: {assignment_name}\n\n"
-        ##f"{RLM}📋 *שם*: *{a['assignment_name']}*\n\n"
-        #f"{RLM}📖 `({a['course_name']})`\n"
-        f"{RLM}{emoji} *מועד הגשה*: {due_str}\n"
-        ##f"{RLM}{emoji} *בתאריך*: {due_str}\n"
+    Args:
+        to: מספר הטלפון של המשתמש.
+        name: שם המשתמש לברכה.
+    """
+    send_list(
+        to=to,
+        message=f"{RLM}היי {name} 👋, במה אני יכול לעזור לך היום?",
+        button_text="בחר אפשרות",
+        sections=[{
+            "title": "התפריט הראשי",
+            "rows": [
+                {"id": "menu_assignments", "title": "📋 המטלות שלי"},
+                {"id": "menu_grades", "title": "🎓 ציונים בקורסים"},
+                {"id": "menu_upcoming", "title": "📅 הגשות קרובות"},
+                {"id": "menu_dashboard", "title": "🖥️ הדאשבורד שלי"},
+                {"id": "menu_status", "title": "📊 דוח מצב"},
+            ]
+        }]
     )
 
 
-def get_active_courses(user_id: int) -> list:
-    """מחזיר רק קורסים פעילים של המשתמש"""
-    conn = get_connection()
-    courses = conn.execute("""
-        SELECT DISTINCT course_name
-        FROM assignments
-        WHERE user_id = ?
-        AND (due_date IS NULL OR due_date > ?)
-        ORDER BY due_date ASC
-    """, (user_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))).fetchall()
-    conn.close()
-    return [c["course_name"] for c in courses]
-
-
 async def handle_message(from_number: str, msg_type: str, content: str):
+    """
+    נקודת הכניסה המרכזית לכל הודעה נכנסת.
+    מנתב לפי סוג ההודעה (טקסט, כפתור, רשימה, אודיו) ותוכנה.
+
+    Args:
+        from_number: מספר הטלפון של השולח.
+        msg_type: סוג ההודעה — 'text', 'button', 'list', 'audio'.
+        content: תוכן ההודעה (טקסט, מזהה כפתור/רשימה, או מזהה מדיה).
+    """
     user = get_user(from_number)
     name = get_first_name(user) if user else ""
 
@@ -131,7 +133,6 @@ async def handle_message(from_number: str, msg_type: str, content: str):
             conn.close()
 
             def _seed_and_welcome():
-                from moodle.poller import poll_user_on_demand
                 poll_user_on_demand(user_id, skip_notifications=True)
                 conn2 = get_connection()
                 conn2.execute("UPDATE assignments SET notified_new=1 WHERE user_id=?", (user_id,))
@@ -152,8 +153,10 @@ async def handle_message(from_number: str, msg_type: str, content: str):
             )
             return
 
+        normalized = content.strip().lower()
         has_hebrew = bool(re.search(r'[֐-׿]', content))
-        if has_hebrew and len(content.split()) >= 2:
+        is_greeting = normalized in GREETINGS or len(content.split()) < 2
+        if has_hebrew and not is_greeting:
             await handle_ai_request(from_number, content, user)
             return
 
@@ -211,578 +214,3 @@ async def handle_message(from_number: str, msg_type: str, content: str):
         elif content.startswith("grades_course_"):
             course_id = int(content.replace("grades_course_", ""))
             await show_grades_for_course(from_number, user["id"], course_id)
-
-
-async def send_status_report(phone_number: str, user_id: int):
-    from utils.task_manager import get_upcoming_tasks
-    from utils.ai_assistant import generate_status_report
-
-    conn = get_connection()
-    assignments = conn.execute("""
-        SELECT a.assignment_name, a.course_name, a.due_date
-        FROM assignments a
-        LEFT JOIN user_assignment_settings uas
-            ON a.user_id = uas.user_id AND a.moodle_assign_id = uas.moodle_assign_id
-        LEFT JOIN user_courses uc ON a.user_id = uc.user_id AND a.course_name = uc.course_name
-        LEFT JOIN user_course_settings ucs ON uc.user_id = ucs.user_id AND uc.course_id = ucs.course_id
-        WHERE a.user_id = ?
-          AND a.is_submitted = 0
-          AND COALESCE(uas.status, 'open') = 'open'
-          AND COALESCE(ucs.is_active, 1) = 1
-          AND a.due_date >= datetime('now')
-          AND a.due_date <= datetime('now', '+7 days')
-        ORDER BY a.due_date ASC
-    """, (user_id,)).fetchall()
-    first_name_row = conn.execute(
-        "SELECT first_name FROM users WHERE id=?", (user_id,)
-    ).fetchone()
-    first_name = (first_name_row["first_name"] or "") if first_name_row else ""
-    conn.close()
-
-    personal_tasks = get_upcoming_tasks(user_id, days=7)
-
-    report = generate_status_report(
-        first_name=first_name,
-        assignments=[dict(a) for a in assignments],
-        personal_tasks=personal_tasks,
-    )
-    send_text(phone_number, report)
-    send_buttons(phone_number, f"{RLM}מה תרצה לעשות?", [
-        {"id": "back_main", "title": "⬅️ תפריט ראשי"}
-    ])
-
-
-async def send_dashboard_link(phone_number: str, user_id: int):
-    import random
-    code = str(random.randint(100000, 999999))
-    conn = get_connection()
-    conn.execute(
-        "INSERT INTO dashboard_sessions (phone_number, code, expires_at) "
-        "VALUES (?, ?, datetime('now', '+10 minutes'))",
-        (phone_number, code),
-    )
-    conn.commit()
-    conn.close()
-    send_text(
-        phone_number,
-        f"{RLM}הדאשבורד שלך מוכן! 🖥️\n"
-        f"{RLM}לחץ על הקישור כדי להיכנס:\n"
-        f"{RLM}https://moodi.aitoolhub.blog/dashboard?phone={phone_number}&code={code}\n\n"
-        f"{RLM}⏱️ הקישור תקף ל-10 דקות בלבד.",
-    )
-
-
-def send_main_menu(to: str, name: str):
-    send_list(
-        to=to,
-        message=f"{RLM}היי {name} 👋, במה אני יכול לעזור לך היום?",
-        button_text="בחר אפשרות",
-        sections=[{
-            "title": "התפריט הראשי",
-            "rows": [
-                {"id": "menu_assignments", "title": "📋 המטלות שלי"},
-                {"id": "menu_grades", "title": "🎓 ציונים בקורסים"},
-                {"id": "menu_upcoming", "title": "📅 הגשות קרובות"},
-                {"id": "menu_dashboard", "title": "🖥️ הדאשבורד שלי"},
-                {"id": "menu_status", "title": "📊 דוח מצב"},
-            ]
-        }]
-    )
-
-
-async def show_course_selection(to: str, user_id: int):
-    conn = get_connection()
-    courses = conn.execute("""
-    SELECT DISTINCT uc.course_id, uc.course_name
-    FROM user_courses uc
-    LEFT JOIN user_course_settings ucs
-      ON uc.user_id = ucs.user_id AND uc.course_id = ucs.course_id
-    WHERE uc.user_id = ? AND COALESCE(ucs.is_active, 1) = 1
-    AND EXISTS (
-        SELECT 1 FROM assignments a
-        WHERE a.user_id = uc.user_id
-        AND a.course_name = uc.course_name
-        AND a.is_submitted = 0
-    )
-    ORDER BY uc.added_at DESC
-""", (user_id,)).fetchall()
-    name_row = conn.execute("SELECT first_name FROM users WHERE id = ?", (user_id,)).fetchone()
-    name = get_first_name(name_row) if name_row else ""
-    conn.close()
-
-    if not courses:
-        send_text(to, f"{RLM}🎉 אין לך מטלות פתוחות כרגע!")
-        send_main_menu(to, name)
-        return
-
-    rows = []
-    for c in courses[:9]:
-        short = get_short_name(c["course_id"], c["course_name"].strip())
-        rows.append({
-            "id": f"course_{c['course_id']}",
-            "title": short
-        })
-    rows.append({"id": "course_all", "title": "📋 כל הקורסים"})
-
-    send_list(
-        to=to,
-        message=f"{RLM}באיזה קורס תרצה לראות מטלות?",
-        button_text="בחר קורס",
-        sections=[{"title": "הקורסים שלך", "rows": rows}]
-    )
-
-
-async def show_assignments(to: str, user_id: int, course_id, user=None, full_view: bool = False):
-    name = get_first_name(user) if user else ""
-    conn = get_connection()
-
-    if course_id is None:
-        rows = conn.execute("""
-            SELECT a.course_name, a.assignment_name, a.due_date
-            FROM assignments a
-            LEFT JOIN user_courses uc
-              ON a.user_id = uc.user_id AND a.course_name = uc.course_name
-            LEFT JOIN user_course_settings ucs
-              ON uc.user_id = ucs.user_id AND uc.course_id = ucs.course_id
-            LEFT JOIN user_assignment_settings uas
-              ON a.user_id = uas.user_id AND a.moodle_assign_id = uas.moodle_assign_id
-            WHERE a.user_id = ?
-              AND a.is_submitted = 0
-              AND COALESCE(ucs.is_active, 1) = 1
-              AND COALESCE(uas.status, 'open') = 'open'
-            ORDER BY
-                CASE WHEN a.due_date IS NULL THEN 1 ELSE 0 END ASC,
-                a.due_date ASC
-        """, (user_id,)).fetchall()
-        course_header = None
-    else:
-        course_name_row = conn.execute(
-            "SELECT course_name FROM user_courses WHERE course_id = ? AND user_id = ?",
-            (course_id, user_id)
-        ).fetchone()
-        course_header = course_name_row["course_name"]
-        rows = conn.execute("""
-            SELECT a.course_name, a.assignment_name, a.due_date
-            FROM assignments a
-            LEFT JOIN user_courses uc
-              ON a.user_id = uc.user_id AND a.course_name = uc.course_name
-            LEFT JOIN user_course_settings ucs
-              ON uc.user_id = ucs.user_id AND uc.course_id = ucs.course_id
-            LEFT JOIN user_assignment_settings uas
-              ON a.user_id = uas.user_id AND a.moodle_assign_id = uas.moodle_assign_id
-            WHERE a.user_id = ?
-              AND a.course_name = ?
-              AND a.is_submitted = 0
-              AND COALESCE(ucs.is_active, 1) = 1
-              AND COALESCE(uas.status, 'open') = 'open'
-            ORDER BY
-                CASE WHEN a.due_date IS NULL THEN 1 ELSE 0 END ASC,
-                a.due_date ASC
-        """, (user_id, course_header)).fetchall()
-    conn.close()
-
-    # Categorise by date (not by seconds)
-    today = datetime.now().date()
-    red, yellow, green, white, overdue = [], [], [], [], []
-    for a in rows:
-        if not a["due_date"]:
-            white.append(a)
-            continue
-        due_date_obj = datetime.strptime(a["due_date"], '%Y-%m-%d %H:%M:%S').date()
-        if due_date_obj < today:
-            overdue.append(a)
-        elif due_date_obj == today:
-            red.append(a)
-        elif (due_date_obj - today).days <= 3:
-            yellow.append(a)
-        else:
-            green.append(a)
-
-    # Pair each assignment with its display emoji
-    open_items = (
-        [(a, "🔴") for a in red] +
-        [(a, "🟡") for a in yellow] +
-        [(a, "🟢") for a in green] +
-        [(a, "⚪") for a in white]
-    )
-    overdue_items = [(a, "❗️") for a in overdue]
-
-    if not open_items and not overdue_items:
-        send_text(to, f"{RLM}{name}, סיימת הכל! 🎉 אין מטלות פתוחות כרגע.")
-        send_main_menu(to, name)
-        return
-
-    include_course = course_id is None
-
-    def fmt_date(due_str):
-        due = datetime.strptime(due_str, '%Y-%m-%d %H:%M:%S')
-        diff_days = (due.date() - datetime.now().date()).days
-        if diff_days == 0:
-            return f"היום | {due.strftime('%H:%M')}"
-        elif diff_days == 1:
-            return f"מחר | {due.strftime('%H:%M')}"
-        else:
-            return f"{due.strftime('%d/%m/%y')} | {due.strftime('%H:%M')}"
-
-    def fmt_block(a, emoji):
-        date_part = fmt_date(a["due_date"]) if a["due_date"] else "ללא תאריך"
-        SEP = f"{RLM}• - - - - - - - - - - - - - - - - - - - - •\n"
-        if include_course:
-            return (
-                SEP +
-                f"{RLM}📖 *{a['course_name'].strip()}*\n\n"
-                f"{RLM}📋 *מטלה*: {a['assignment_name'].strip()}\n\n"
-                f"{RLM}{emoji} *מועד הגשה*: {date_part}\n"
-            )
-        else:
-            return (
-                SEP +
-                f"{RLM}📋 *מטלה*: {a['assignment_name'].strip()}\n\n"
-                f"{RLM}{emoji} *מועד הגשה*: {date_part}\n"
-            )
-
-    # Header
-    message = f"{RLM}📋 *המטלות הפתוחות שלך:*\n"
-    if course_header:
-        message += f"{RLM}📖 *{course_header.strip()}*\n"
-    message += "\n"
-
-    if full_view:
-        for a, emoji in open_items:
-            message += fmt_block(a, emoji)
-        message += f"{RLM}• - - - - - - - - - - - - - - - - - - - - •\n"
-    else:
-        top3 = open_items[:3]
-        rest = open_items[3:]
-
-        for a, emoji in top3:
-            message += fmt_block(a, emoji)
-        message += f"{RLM}• - - - - - - - - - - - - - - - - - - - - •\n"
-
-        if rest:
-            rest_counts = {"🔴": 0, "🟡": 0, "🟢": 0, "⚪": 0}
-            for _, emoji in rest:
-                rest_counts[emoji] += 1
-            message += "\n"
-            for emoji in ("🔴", "🟡", "🟢", "⚪"):
-                if rest_counts[emoji]:
-                    message += f"{RLM}{emoji} {rest_counts[emoji]} מטלות נוספות\n"
-            message += "\n"
-
-        if overdue_items:
-            message += f"\n{RLM}⚠️ *פספסת להגיש* ⚠️\n"
-            for a, emoji in overdue_items:
-                message += fmt_block(a, emoji)
-            message += f"{RLM}• - - - - - - - - - - - - - - - - - - - - •\n"
-
-    send_text(to, message)
-
-    if full_view or len(open_items) <= 3:
-        send_buttons(to, f"{RLM}מה תרצה לעשות?", [
-            {"id": "back_main", "title": "⬅️ תפריט ראשי"},
-        ])
-    else:
-        course_key = str(course_id) if course_id is not None else "all"
-        send_buttons(to, f"{RLM}מה תרצה לעשות?", [
-            {"id": f"show_all_{course_key}", "title": "📋 הצג את כל המטלות"},
-            {"id": "back_main",              "title": "⬅️ תפריט ראשי"},
-        ])
-
-
-def parse_max_grade(grade_range: str):
-    if not grade_range:
-        return None
-    parts = re.split(r'[–\-]', grade_range)
-    if len(parts) >= 2:
-        try:
-            return float(parts[-1].strip())
-        except ValueError:
-            pass
-    return None
-
-
-async def show_grades(to: str, user_id: int):
-    conn = get_connection()
-    courses = conn.execute("""
-        SELECT DISTINCT uc.course_id, uc.course_name
-        FROM user_courses uc
-        LEFT JOIN user_course_settings ucs
-          ON uc.user_id = ucs.user_id AND uc.course_id = ucs.course_id
-        WHERE uc.user_id = ? AND COALESCE(ucs.is_active, 1) = 1
-        AND EXISTS (
-            SELECT 1 FROM grades g
-            WHERE g.user_id = uc.user_id AND g.course_name = uc.course_name
-        )
-        ORDER BY uc.added_at DESC
-    """, (user_id,)).fetchall()
-    conn.close()
-
-    if not courses:
-        send_text(to, f"{RLM}אין ציונים עדיין 📊")
-        send_main_menu(to, "")
-        return
-
-    rows = []
-    for c in courses[:9]:
-        short = get_short_name(c["course_id"], c["course_name"].strip())
-        rows.append({"id": f"grades_course_{c['course_id']}", "title": short})
-
-    send_list(
-        to=to,
-        message=f"{RLM}באיזה קורס תרצה לראות ציונים?",
-        button_text="בחר קורס",
-        sections=[{"title": "הקורסים שלך", "rows": rows}]
-    )
-
-
-async def show_grades_for_course(to: str, user_id: int, course_id: int):
-    conn = get_connection()
-    course_row = conn.execute(
-        "SELECT course_name FROM user_courses WHERE course_id = ? AND user_id = ?",
-        (course_id, user_id)
-    ).fetchone()
-    course_name = course_row["course_name"] if course_row else ""
-    grades = conn.execute("""
-        SELECT item_name, grade, grade_range
-        FROM grades
-        WHERE user_id = ? AND course_name = ?
-        ORDER BY detected_at DESC
-    """, (user_id, course_name)).fetchall()
-    conn.close()
-
-    if not grades:
-        send_text(to, f"{RLM}אין ציונים לקורס זה עדיין 📊")
-        await show_grades(to, user_id)
-        return
-
-    message = f"{RLM}🎓 *ציונים — {course_name.strip()}*\n\n"
-    for g in grades:
-        max_g = parse_max_grade(g["grade_range"])
-        grade_display = f"{g['grade']:.0f} / {max_g:.0f}" if max_g else f"{g['grade']:.0f}"
-        message += (
-            f"{RLM}• 📝 *{g['item_name']}*\n"
-            f"{RLM}         📊 *ציון:* *{grade_display}*\n\n"
-        )
-
-    send_text(to, message)
-    send_buttons(to, f"{RLM}מה תרצה לעשות?", [
-        {"id": "back_grades", "title": "⬅️ חזור לקורסים"},
-        {"id": "back_main",   "title": "🏠 תפריט ראשי"},
-    ])
-
-
-async def show_upcoming_menu(to: str, user_id: int):
-    send_list(
-        to=to,
-        message=f"{RLM}בחר טווח זמן:",
-        button_text="בחר",
-        sections=[{"title": "הגשות קרובות", "rows": [
-            {"id": "upcoming_today", "title": "📅 היום"},
-            {"id": "upcoming_3days", "title": "📅 3 ימים הקרובים"},
-            {"id": "upcoming_week",  "title": "📅 השבוע הקרוב"},
-        ]}]
-    )
-
-
-async def show_upcoming(to: str, user_id: int, days: int):
-    from datetime import timedelta
-    period = {0: "היום", 3: "3 הימים הקרובים", 7: "השבוע הקרוב"}[days]
-    today = datetime.now().strftime('%Y-%m-%d')
-    end_date = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
-
-    conn = get_connection()
-    assignments = conn.execute("""
-        SELECT a.course_name, a.assignment_name, a.due_date
-        FROM assignments a
-        LEFT JOIN user_courses uc
-          ON a.user_id = uc.user_id AND a.course_name = uc.course_name
-        LEFT JOIN user_course_settings ucs
-          ON uc.user_id = ucs.user_id AND uc.course_id = ucs.course_id
-        LEFT JOIN user_assignment_settings uas
-          ON a.user_id = uas.user_id AND a.moodle_assign_id = uas.moodle_assign_id
-        WHERE a.user_id = ?
-          AND a.is_submitted = 0
-          AND COALESCE(ucs.is_active, 1) = 1
-          AND COALESCE(uas.status, 'open') = 'open'
-          AND a.due_date >= ? AND a.due_date <= ?
-        ORDER BY a.due_date ASC
-    """, (user_id, f"{today} 00:00:00", f"{end_date} 23:59:59")).fetchall()
-    conn.close()
-
-    if not assignments:
-        send_text(to, f"{RLM}✅ אין הגשות ל{period}!")
-        send_buttons(to, f"{RLM}מה תרצה לעשות?", [
-            {"id": "back_main", "title": "⬅️ תפריט ראשי"},
-        ])
-        return
-
-    # Group by course
-    groups: dict = {}
-    for a in assignments:
-        groups.setdefault(a["course_name"], []).append(a)
-
-    message = f"{RLM}📅 *הגשות קרובות — {period}:*\n\n"
-    for course_name, items in groups.items():
-        message += f"{RLM}📖 *{course_name.strip()}*\n"
-        for a in items:
-            if a["due_date"]:
-                due = datetime.strptime(a["due_date"], '%Y-%m-%d %H:%M:%S')
-                due_str = due.strftime('%d/%m %H:%M')
-            else:
-                due_str = "ללא תאריך"
-            message += f"{RLM}▫️ *{a['assignment_name'].strip()}*\n"
-            message += f"{RLM}    ⏳ ```{due_str}```\n\n"
-        message += "\n"
-
-    send_text(to, message)
-    send_buttons(to, f"{RLM}מה תרצה לעשות?", [
-        {"id": "back_main", "title": "⬅️ תפריט ראשי"},
-    ])
-
-
-async def handle_audio_message(from_number: str, media_id: str, user):
-    from utils.whatsapp_media import download_whatsapp_audio
-    from utils.ai_assistant import transcribe_audio
-
-    audio_bytes = download_whatsapp_audio(media_id)
-    if not audio_bytes:
-        send_text(from_number, f"{RLM}לא הצלחתי לעבד את ההקלטה, נסה שוב")
-        return
-
-    text = transcribe_audio(audio_bytes)
-    if not text:
-        send_text(from_number, f"{RLM}לא הצלחתי להבין את ההקלטה, נסה לכתוב")
-        return
-
-    await handle_ai_request(from_number, text, user)
-
-
-async def handle_ai_request(from_number: str, text: str, user):
-    from utils.ai_assistant import parse_user_request
-    from utils.task_manager import (
-        create_task, get_upcoming_tasks,
-        delete_task_by_id, delete_task_by_reference,
-        update_task_by_id, update_task_datetime,
-    )
-    from notifications.scheduler import schedule_reminder
-
-    name = get_first_name(user)
-    existing_tasks = get_upcoming_tasks(user["id"], days=365)
-
-    try:
-        results = parse_user_request(text, name, existing_tasks=existing_tasks)
-    except Exception as e:
-        logger.error(f"AI parse failed: {e}")
-        send_text(from_number, f"{RLM}מצטער, לא הצלחתי לעבד את הבקשה כרגע. נסה שוב מאוחר יותר 🙏")
-        return
-
-    if not results:
-        send_text(from_number, f"{RLM}מצטער, לא הצלחתי להבין את הבקשה. נסה לנסח אחרת 🙏")
-        return
-
-    messages = []
-    for item in results:
-        action = item.get("action")
-
-        if action == "add_task":
-            task_id = create_task(
-                user["id"],
-                item["title"],
-                item.get("due_datetime"),
-                item.get("reminders", [])
-            )
-            for remind_at in item.get("reminders", []):
-                schedule_reminder(task_id, user["id"], from_number, item["title"], remind_at)
-            due_str = f" ב-{item['due_datetime']}" if item.get("due_datetime") else ""
-            reminders_str = f"\n{RLM}⏰ תזכורות הוגדרו" if item.get("reminders") else ""
-            messages.append(f"{RLM}✅ נוסף: {item['title']}{due_str}{reminders_str}")
-
-        elif action == "list_tasks":
-            tasks = get_upcoming_tasks(user["id"])
-            if not tasks:
-                messages.append(f"{RLM}אין לך משימות אישיות קרובות 🎉")
-            else:
-                msg = f"{RLM}📋 המשימות האישיות שלך:\n"
-                for t in tasks:
-                    due = f" | {t['due_datetime'][:16]}" if t['due_datetime'] else ""
-                    msg += f"{RLM}• {t['title']}{due}\n"
-                messages.append(msg)
-
-        elif action == "delete_task":
-            task_id = item.get("task_id")
-            if task_id:
-                success = delete_task_by_id(task_id, user["id"])
-            else:
-                success = delete_task_by_reference(user["id"], item.get("task_reference") or "")
-            if not success:
-                send_text(from_number, f"{RLM}לא מצאתי משימה תואמת. האם שמה נכון?")
-                continue
-            messages.append(f"{RLM}✅ המשימה הוסרה")
-
-        elif action == "update_task":
-            task_id = item.get("task_id")
-            if task_id:
-                resolved_id = update_task_by_id(task_id, user["id"], item.get("title"), item.get("due_datetime"))
-            else:
-                resolved_id = update_task_datetime(user["id"], item.get("task_reference") or "", item.get("due_datetime"))
-            if not resolved_id:
-                send_text(from_number, f"{RLM}לא מצאתי משימה תואמת. האם שמה נכון?")
-                continue
-            reminders = item.get("reminders") or []
-            logger.debug(f"update_task resolved_id={resolved_id}, reminders={reminders}")
-            if reminders:
-                from utils.task_manager import add_reminders_to_task
-                from notifications.scheduler import schedule_reminder
-                add_reminders_to_task(resolved_id, user["id"], reminders)
-                for remind_at in reminders:
-                    schedule_reminder(resolved_id, user["id"], from_number,
-                                      item.get("title") or "תזכורת", remind_at)
-            reminders_str = f"\n{RLM}⏰ תזכורות הוגדרו" if reminders else ""
-            messages.append(f"{RLM}✅ המשימה עודכנה{reminders_str}")
-
-        else:
-            messages.append(
-                f"{RLM}לצערי, אני יכול לעזור רק עם ניהול משימות ותזכורות אישיות 😊\n"
-                f"{RLM}לדוגמה: ״תור לספר מחר בשעה 11״ או ״תזכיר לי על X ב-Y״"
-            )
-
-    if messages:
-        send_text(from_number, "\n\n".join(messages))
-
-    send_buttons(from_number, f"{RLM}מה עוד?", [
-        {"id": "back_main", "title": "⬅️ תפריט ראשי"}
-    ])
-
-
-async def show_today(to: str, user_id: int):
-    today = datetime.now().strftime('%Y-%m-%d')
-    conn = get_connection()
-    assignments = conn.execute("""
-        SELECT a.course_name, a.assignment_name, a.due_date
-        FROM assignments a
-        LEFT JOIN user_assignment_settings uas
-          ON a.user_id = uas.user_id AND a.moodle_assign_id = uas.moodle_assign_id
-        WHERE a.user_id = ?
-        AND a.due_date LIKE ?
-        AND a.is_submitted = 0
-        AND COALESCE(uas.status, 'open') = 'open'
-        ORDER BY a.due_date ASC
-    """, (user_id, f"{today}%")).fetchall()
-    name_row = conn.execute("SELECT first_name FROM users WHERE id = ?", (user_id,)).fetchone()
-    name = get_first_name(name_row) if name_row else ""
-    conn.close()
-
-    if not assignments:
-        send_text(to, f"{RLM}✅ אין לך מטלות להגשה היום. תהנה!")
-        send_main_menu(to, name)
-        return
-
-    message = f"{RLM}📅 *מטלות להגשה היום:*\n"
-    for a in assignments:
-        message += format_assignment(a)
-    message += f"{RLM}───────────────"
-
-    send_text(to, message)
-    send_buttons(to, f"{RLM}מה תרצה לעשות?", [
-        {"id": "back_main", "title": "⬅️ תפריט ראשי"},
-    ])
