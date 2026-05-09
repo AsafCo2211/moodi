@@ -95,6 +95,8 @@ def sync_submission_statuses(cursor, user_id: int, wstoken: str):
 def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list, course_map: dict, phone_number: str = "", skip_notifications: bool = False):
     """
     סורק מטלות וציונים עבור משתמש אחד.
+
+    לכל מטלה מ-Moodle: מכניס חדשות, ומעדכן due_date אם הפרופסור שינה מועד הגשה.
     course_map: {course_id: course_name}
     """
     conn = get_connection()
@@ -117,20 +119,32 @@ def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list,
         logger.debug(f"{len(assignments)} assignments fetched")
 
         for assign in assignments:
-            try:
+            new_due = assign["due_date"].strftime('%Y-%m-%d %H:%M:%S') if assign["due_date"] else None
+            existing = cursor.execute(
+                "SELECT due_date FROM assignments WHERE user_id=? AND moodle_assign_id=?",
+                (user_id, assign["moodle_assign_id"])
+            ).fetchone()
+
+            if existing is None:
                 cursor.execute("""
-                    INSERT OR IGNORE INTO assignments 
-                    (user_id, moodle_assign_id, course_name, assignment_name, due_date)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO assignments
+                    (user_id, moodle_assign_id, course_name, assignment_name, due_date,
+                     notified_new, notified_due_changed)
+                    VALUES (?, ?, ?, ?, ?, 0, 1)
                 """, (
                     user_id,
                     assign["moodle_assign_id"],
                     assign["course_name"],
                     assign["assignment_name"],
-                    assign["due_date"]
+                    new_due,
                 ))
-            except sqlite3.IntegrityError:
-                pass
+            elif existing["due_date"] != new_due:
+                cursor.execute("""
+                    UPDATE assignments
+                    SET due_date=?, notified_due_changed=0
+                    WHERE user_id=? AND moodle_assign_id=?
+                """, (new_due, user_id, assign["moodle_assign_id"]))
+                logger.info(f"Due date changed for assign {assign['moodle_assign_id']}: {existing['due_date']} → {new_due}")
 
         # --- ציונים ---
         for course_id in course_ids:
@@ -150,9 +164,14 @@ def poll_user(user_id: int, moodle_user_id: int, wstoken: str, course_ids: list,
 
         if not skip_notifications:
             try:
-                from notifications.engine import send_new_assignment_notifications, send_new_grade_notifications
+                from notifications.engine import (
+                    send_new_assignment_notifications,
+                    send_new_grade_notifications,
+                    send_due_date_changed_notifications,
+                )
                 send_new_assignment_notifications(user_id, phone_number)
                 send_new_grade_notifications(user_id, phone_number)
+                send_due_date_changed_notifications(user_id, phone_number)
             except Exception as e:
                 logger.error(f"Error sending notifications for user {user_id}: {e}")
 

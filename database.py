@@ -142,6 +142,12 @@ def init_db():
     except Exception:
         pass  # column already exists
 
+    try:
+        cursor.execute("ALTER TABLE assignments ADD COLUMN notified_due_changed BOOLEAN DEFAULT 1")
+        conn.commit()
+    except Exception:
+        pass  # column already exists
+
     conn.close()
     logger.info("Database initialized successfully")
 

@@ -66,6 +66,51 @@ def send_new_assignment_notifications(user_id: int, phone_number: str):
             logger.error(f"Error notifying new assignment {row['moodle_assign_id']} for user {user_id}: {e}")
 
 
+def send_due_date_changed_notifications(user_id: int, phone_number: str):
+    """
+    שולח התראה על מועד הגשה שהוארך על ידי הפרופסור.
+
+    מחפש מטלות עם notified_due_changed=0, שולח הודעת WhatsApp עם המועד החדש,
+    ומעדכן את הדגל ל-1 לאחר שליחה מוצלחת.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    rows = cursor.execute(
+        "SELECT moodle_assign_id, course_name, assignment_name, due_date "
+        "FROM assignments WHERE user_id = ? AND notified_due_changed = 0",
+        (user_id,)
+    ).fetchall()
+    conn.close()
+
+    for row in rows:
+        try:
+            if row["due_date"]:
+                dt = datetime.fromisoformat(row["due_date"])
+                due_line = f"{RLM}📅 מועד חדש: {dt.strftime('%d/%m/%y | %H:%M')}"
+            else:
+                due_line = f"{RLM}📅 מועד חדש: ללא תאריך"
+
+            message = (
+                f"{RLM}📅 מועד הגשה עודכן ב{row['course_name']}!\n"
+                f"{RLM}{row['assignment_name']}\n"
+                f"{due_line}"
+            )
+            send_text(phone_number, message)
+            send_buttons(phone_number, f"{RLM}מה תרצה לעשות?", [
+                {"id": "back_main", "title": "⬅️ תפריט ראשי"}
+            ])
+
+            conn2 = get_connection()
+            conn2.execute(
+                "UPDATE assignments SET notified_due_changed=1 WHERE user_id=? AND moodle_assign_id=?",
+                (user_id, row["moodle_assign_id"])
+            )
+            conn2.commit()
+            conn2.close()
+        except Exception as e:
+            logger.error(f"Error notifying due date change {row['moodle_assign_id']} for user {user_id}: {e}")
+
+
 def send_new_grade_notifications(user_id: int, phone_number: str):
     conn = get_connection()
     cursor = conn.cursor()
