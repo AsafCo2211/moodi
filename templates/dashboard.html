@@ -859,6 +859,128 @@
     @media (max-width: 400px) {
       .cal-day { min-height: 48px; }
     }
+
+    /* ─── Recordings ─── */
+    .rec-topbar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+      padding: 16px 20px 12px;
+    }
+    .rec-course-sel {
+      width: 200px; flex-shrink: 0;
+      border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 7px 12px; font-size: 14px; background: #fff; color: #1e293b; cursor: pointer;
+    }
+    .rec-pills { display: flex; gap: 6px; flex-shrink: 0; }
+    .rec-pill {
+      padding: 6px 14px; border-radius: 20px; border: 1.5px solid #e2e8f0;
+      font-size: 13px; font-weight: 500; background: #fff; color: #475569; cursor: pointer;
+    }
+    .rec-pill.active { background: #ea580c; border-color: #ea580c; color: #fff; }
+    .rec-filter-sel {
+      border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 7px 12px; font-size: 13px; background: #fff; color: #1e293b; cursor: pointer;
+    }
+    .rec-search-wrap { position: relative; flex: 1; min-width: 140px; }
+    .rec-search-wrap input {
+      width: 100%; padding: 7px 12px 7px 34px; border-radius: 10px;
+      border: 1px solid #e2e8f0; font-size: 13px; background: #fff; outline: none; box-sizing: border-box;
+    }
+    .rec-search-icon {
+      position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+      color: #94a3b8; pointer-events: none; font-size: 15px;
+    }
+    .rec-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 20px; padding: 4px 20px 20px;
+    }
+    @media (max-width: 1024px) { .rec-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 640px)  { .rec-grid { grid-template-columns: 1fr; padding: 4px 12px 16px; } }
+    .rec-card {
+      background: #fff; border-radius: 14px; border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .rec-thumb {
+      position: relative; width: 100%; padding-top: 56.25%;
+      background: linear-gradient(135deg, #1e293b, #334155); flex-shrink: 0; overflow: hidden;
+      cursor: pointer;
+    }
+    .rec-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .rec-thumb-play {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 32px; color: rgba(255,255,255,0.75); pointer-events: none;
+    }
+    .rec-thumb-overlay {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.45);
+      display: none; align-items: center; justify-content: center;
+    }
+    .rec-card.watched .rec-thumb-overlay { display: flex; }
+    .rec-watched-badge {
+      position: absolute; top: 8px; right: 8px;
+      background: rgba(0,0,0,0.6); color: #fff;
+      font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+    }
+    .rec-card-body { padding: 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+    .rec-card-title {
+      font-size: 14px; font-weight: 600; color: #1e293b;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .rec-card-meta { font-size: 12px; color: #64748b; display: flex; flex-direction: column; gap: 3px; }
+    .rec-meta-row { display: flex; align-items: center; gap: 5px; }
+    .rec-card-actions {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px; border-top: 1px solid #f1f5f9; margin-top: auto;
+    }
+    .rec-actions-right { display: flex; gap: 6px; align-items: center; }
+    .rec-btn { padding: 5px 12px; border-radius: 8px; border: none; font-size: 12px; font-weight: 500; cursor: pointer; }
+    .rec-btn-view { background: #ea580c; color: #fff; }
+    .rec-btn-view:hover { background: #c2410c; }
+    .rec-btn-watch { background: #fff; color: #475569; border: 1.5px solid #e2e8f0; }
+    .rec-btn-watch.active { background: #dcfce7; color: #15803d; border-color: #86efac; }
+    .rec-btn-note { background: none; border: none; cursor: pointer; font-size: 16px; padding: 4px; line-height: 1; color: #94a3b8; }
+    .rec-btn-note:hover { color: #ea580c; }
+    .rec-btn-task { background: #f8fafc; color: #475569; border: 1.5px solid #e2e8f0; }
+    .rec-btn-task:hover { background: #f1f5f9; }
+    .rec-btn-task:disabled { opacity: 0.55; cursor: default; }
+    .rec-toast {
+      position: fixed; right: 20px; top: 80px;
+      background: #1e293b; color: #fff;
+      padding: 12px 20px; border-radius: 12px;
+      font-size: 14px; font-weight: 500; z-index: 2000;
+      opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    }
+    .rec-toast.show { opacity: 1; }
+    .rec-status { padding: 60px 20px; text-align: center; font-size: 15px; color: #64748b; line-height: 1.7; }
+    .rec-reauth-banner {
+      margin: 16px; padding: 14px 16px;
+      background: #fff7ed; border: 1px solid #fed7aa;
+      border-radius: 12px; font-size: 14px; color: #9a3412;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    }
+    .rec-reauth-btn {
+      background: #ea580c; color: #fff; border: none;
+      padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .rec-modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000;
+      align-items: center; justify-content: center;
+    }
+    .rec-modal-overlay.open { display: flex; }
+    .rec-modal-card {
+      background: #fff; border-radius: 16px; padding: 24px;
+      width: 90%; max-width: 400px; direction: rtl;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+    }
+    .rec-modal-title { font-size: 15px; font-weight: 700; color: #1e293b; margin-bottom: 12px; }
+    .rec-modal-textarea {
+      width: 100%; border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 10px; font-size: 14px; resize: vertical; outline: none;
+      font-family: inherit; direction: rtl; box-sizing: border-box;
+    }
+    .rec-modal-actions { display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; }
+    .rec-modal-save { background: #ea580c; color: #fff; border: none; padding: 8px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .rec-modal-close { background: #f1f5f9; color: #475569; border: none; padding: 8px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+    .rec-modal-saved { font-size: 13px; color: #15803d; margin-top: 6px; display: none; }
   </style>
 </head>
 <body>
@@ -995,7 +1117,56 @@
 
       <!-- Recordings panel -->
       <div id="panel-recordings" class="tab-panel">
-        <div class="coming-soon">🎙️<br>בקרוב — מידע על הקלטות שיעורים</div>
+
+        <!-- Reauth banner -->
+        <div id="rec-reauth-banner" class="rec-reauth-banner" style="display:none">
+          <span>⚠️ יש להתחבר מחדש כדי לצפות בהקלטות</span>
+          <button class="rec-reauth-btn" onclick="window.location='/login?phone='+encodeURIComponent(phone)">התחבר מחדש</button>
+        </div>
+
+        <!-- Top bar -->
+        <div class="rec-topbar">
+          <select id="rec-course-select" class="rec-course-sel" onchange="loadRecordings()">
+            <option value="">בחר קורס...</option>
+          </select>
+          <div class="rec-pills">
+            <button class="rec-pill active" onclick="setTypePill(this,'')">הכל</button>
+            <button class="rec-pill" onclick="setTypePill(this,'lecture')">שיעורים</button>
+            <button class="rec-pill" onclick="setTypePill(this,'tutorial')">תרגולים</button>
+          </div>
+          <select id="rec-time-filter" class="rec-filter-sel" onchange="applyFilters()">
+            <option value="">כל הזמן</option>
+            <option value="today">היום</option>
+            <option value="3days">3 ימים אחרונים</option>
+            <option value="week">שבוע אחרון</option>
+          </select>
+          <select id="rec-lecturer-filter" class="rec-filter-sel" onchange="applyFilters()">
+            <option value="">כל המרצים</option>
+          </select>
+          <div class="rec-search-wrap">
+            <span class="rec-search-icon">🔍</span>
+            <input id="rec-search" type="text" placeholder="חיפוש לפי שם..." oninput="applyFilters()">
+          </div>
+        </div>
+
+        <!-- Status / reconnecting -->
+        <div id="rec-status" class="rec-status" style="display:none"></div>
+
+        <!-- Grid -->
+        <div id="rec-grid" class="rec-grid"></div>
+
+        <!-- Notes modal -->
+        <div id="rec-notes-modal" class="rec-modal-overlay" onclick="if(event.target===this)closeNoteModal()">
+          <div class="rec-modal-card">
+            <div class="rec-modal-title" id="rec-modal-title-text">הערות</div>
+            <textarea id="rec-notes-textarea" class="rec-modal-textarea" rows="4" placeholder="כתוב הערות לעצמך..."></textarea>
+            <div class="rec-modal-saved" id="rec-modal-saved">נשמר ✓</div>
+            <div class="rec-modal-actions">
+              <button class="rec-modal-save" onclick="saveRecNote()">שמור</button>
+              <button class="rec-modal-close" onclick="closeNoteModal()">סגור</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Stacks panel -->
@@ -1013,6 +1184,9 @@
 
     </main>
   </div>
+
+  <!-- Recordings toast -->
+  <div id="rec-toast" class="rec-toast"></div>
 
   <!-- Overlays -->
   <div id="expired-overlay">
@@ -1101,6 +1275,7 @@
       el.classList.add('active');
       document.getElementById('panel-' + tabName).classList.add('active');
       if (tabName === 'tasks') loadPersonalTasks();
+      if (tabName === 'recordings') loadRecordingsCourses();
       closeDrawer();
     }
 
@@ -1546,12 +1721,22 @@
     });
 
     async function completePersonalTask(taskId) {
-      const res = await fetch('/api/dashboard/personal-tasks/delete', {
-        method: 'POST',
+      const res = await fetch(`/api/tasks/${taskId}/complete`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, code, task_id: taskId }),
+        body: JSON.stringify({ phone, code }),
       });
       if (res.status === 401) { showExpired(); return; }
+      const data = await res.json();
+      if (data.video_id) {
+        watchedSet.add(data.video_id);
+        const recCard = document.getElementById('rec-card-' + data.video_id);
+        if (recCard) {
+          recCard.classList.add('watched');
+          const watchBtn = document.getElementById('rec-watch-btn-' + data.video_id);
+          if (watchBtn) { watchBtn.classList.add('active'); watchBtn.textContent = 'סומן ✓'; }
+        }
+      }
       const card = document.getElementById('task-card-' + taskId);
       if (card) {
         card.style.overflow   = 'hidden';
@@ -1625,6 +1810,328 @@
     }
 
     init();
+
+    // ─── Recordings ────────────────────────────────────────────────────────
+    let currentRecordings = [];
+    let watchedSet = new Set();
+    let notesMap = {};
+    let taskMap = {};
+    let currentFilters = { type: '', time: '', lecturer: '', search: '' };
+    let _recCoursesLoaded = false;
+    let _recCurrentCourseId = null;
+    let _recCurrentCourseName = '';
+    let _recCountdownTimer = null;
+    let _recNoteVideoId = null;
+
+    function stripDateFromTitle(name) {
+      return (name || '').replace(/\s*\(\d{2}-\d{2}-\d{4}\)\s*/g, '').trim();
+    }
+
+    function _escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function _escAttr(s) { return String(s).replace(/'/g, "\\'"); }
+
+    async function loadRecordingsCourses() {
+      if (_recCoursesLoaded) return;
+      _recCoursesLoaded = true;
+      try {
+        const res = await fetch(`/api/recordings/courses?phone=${encodeURIComponent(phone)}&code=${encodeURIComponent(code)}`);
+        if (!res.ok) return;
+        const courses = await res.json();
+        const sel = document.getElementById('rec-course-select');
+        courses.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.course_id;
+          opt.textContent = c.course_name;
+          sel.appendChild(opt);
+        });
+      } catch (e) { console.error('loadRecordingsCourses', e); }
+    }
+
+    async function loadRecordings() {
+      const sel = document.getElementById('rec-course-select');
+      const courseId = sel.value;
+      if (!courseId) { document.getElementById('rec-grid').innerHTML = ''; return; }
+      _recCurrentCourseId = courseId;
+      _recCurrentCourseName = sel.options[sel.selectedIndex]?.text || '';
+      taskMap = {};
+      _showRecStatus('טוען הקלטות...');
+      _clearRecCountdown();
+      document.getElementById('rec-grid').innerHTML = '';
+      document.getElementById('rec-reauth-banner').style.display = 'none';
+      try {
+        const res = await fetch(`/api/recordings/list?phone=${encodeURIComponent(phone)}&code=${encodeURIComponent(code)}&course_id=${courseId}`);
+        if (res.status === 401) {
+          _hideRecStatus();
+          document.getElementById('rec-reauth-banner').style.display = 'flex';
+          return;
+        }
+        const data = await res.json();
+        if (res.status === 503 && data.status === 'reconnecting') {
+          _showRecCountdown(data.retry_after || 360);
+          return;
+        }
+        _hideRecStatus();
+        currentRecordings = data;
+        currentRecordings.sort((a, b) => {
+          const t = d => { if (!d) return 0; const p = d.split(' ')[0].split('-'); return new Date(+p[2], +p[1]-1, +p[0]).getTime(); };
+          return t(b.date) - t(a.date);
+        });
+        watchedSet = new Set(data.filter(v => v.watched).map(v => v.video_id));
+        notesMap = {};
+        data.forEach(v => { if (v.note) notesMap[v.video_id] = v.note; });
+        taskMap = {};
+        data.forEach(v => { if (v.task_id) taskMap[v.video_id] = v.task_id; });
+        populateLecturerFilter(data);
+        applyFilters();
+      } catch (e) {
+        _showRecStatus('שגיאה בטעינת הקלטות. נסה שוב.');
+        console.error('loadRecordings', e);
+      }
+    }
+
+    function populateLecturerFilter(videos) {
+      const sel = document.getElementById('rec-lecturer-filter');
+      const current = sel.value;
+      sel.innerHTML = '<option value="">כל המרצים</option>';
+      const lecturers = [...new Set(videos.map(v => v.lecturer).filter(Boolean))].sort();
+      lecturers.forEach(l => {
+        const opt = document.createElement('option');
+        opt.value = l; opt.textContent = l;
+        if (l === current) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+
+    function setTypePill(el, type) {
+      document.querySelectorAll('.rec-pill').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+      currentFilters.type = type;
+      applyFilters();
+    }
+
+    function _parseRecDate(dateStr) {
+      if (!dateStr) return null;
+      const datePart = dateStr.split(' ')[0];
+      // DD-MM-YYYY (primary format from API, e.g. "08-05-2026 02:13:33")
+      let m = datePart.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+      // DD/MM/YYYY
+      m = datePart.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+      // YYYY-MM-DD
+      m = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) return new Date(+m[1], +m[2]-1, +m[3]);
+      return null;
+    }
+
+    function applyFilters() {
+      const typeF = currentFilters.type;
+      const timeF = document.getElementById('rec-time-filter').value;
+      const lecF  = document.getElementById('rec-lecturer-filter').value;
+      const searchF = (document.getElementById('rec-search').value || '').toLowerCase();
+
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      let cutoff = null;
+      if (timeF === 'today')  cutoff = todayStart;
+      if (timeF === '3days')  cutoff = new Date(todayStart - 2*86400000);
+      if (timeF === 'week')   cutoff = new Date(todayStart - 6*86400000);
+
+      const filtered = currentRecordings.filter(v => {
+        if (typeF && v.type !== typeF) return false;
+        if (lecF && v.lecturer !== lecF) return false;
+        if (searchF) {
+          const searchable = [
+            stripDateFromTitle(v.name),
+            v.lecturer || '',
+            v.date || '',
+            _recCurrentCourseName
+          ].join(' ').toLowerCase();
+          if (!searchable.includes(searchF)) return false;
+        }
+        if (cutoff) {
+          const d = _parseRecDate(v.date);
+          if (!d || d < cutoff) return false;
+        }
+        return true;
+      });
+      renderGrid(filtered);
+    }
+
+    function renderGrid(recordings) {
+      const grid = document.getElementById('rec-grid');
+      if (recordings.length === 0) {
+        grid.innerHTML = '<div class="rec-status" style="display:block;grid-column:1/-1">אין הקלטות להצגה</div>';
+        return;
+      }
+      grid.innerHTML = recordings.map(v => {
+        const vid = _escAttr(v.video_id);
+        const cid = _recCurrentCourseId;
+        const isWatched = watchedSet.has(v.video_id);
+        const title = _escHtml(v.name || '');
+        const hasNote = !!notesMap[v.video_id];
+        const alreadyTasked = !!taskMap[v.video_id];
+        return `<div class="rec-card${isWatched ? ' watched' : ''}" id="rec-card-${vid}">
+          <div class="rec-thumb" onclick="openRecording('${vid}', ${cid})">
+            ${v.thumbnail_b64 ? `<img src="data:image/jpeg;base64,${_escHtml(v.thumbnail_b64)}" alt="">` : ''}
+            <div class="rec-thumb-play">▶</div>
+            <div class="rec-thumb-overlay">
+              <span class="rec-watched-badge">✓ נצפה</span>
+            </div>
+          </div>
+          <div class="rec-card-body">
+            <div class="rec-card-title">${title}</div>
+            <div class="rec-card-meta">
+              ${v.lecturer ? `<div class="rec-meta-row"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg> ${_escHtml(v.lecturer)}</div>` : ''}
+              <div class="rec-meta-row">
+                ${v.duration ? `<span>⏱ <span dir="ltr">${_escHtml(v.duration)}</span></span>` : ''}
+                ${v.duration && v.date ? '<span style="color:#cbd5e1">·</span>' : ''}
+                ${v.date ? `<span>📅 <span dir="ltr">${_escHtml(v.date)}</span></span>` : ''}
+              </div>
+            </div>
+          </div>
+          <div class="rec-card-actions">
+            <button class="rec-btn-note" title="הערות" onclick="openNote('${vid}')">${hasNote ? '📝' : '✏️'}</button>
+            <div class="rec-actions-right">
+              <button class="rec-btn rec-btn-task" id="rec-task-btn-${vid}"
+                onclick="addRecordingTask('${vid}')"${alreadyTasked ? ' disabled' : ''}>${alreadyTasked ? 'נוסף ✓' : '+ משימה'}</button>
+              <button class="rec-btn rec-btn-watch${isWatched ? ' active' : ''}" id="rec-watch-btn-${vid}"
+                onclick="toggleWatched('${vid}', ${cid})">${isWatched ? 'סומן ✓' : 'סמן כנצפה'}</button>
+              <button class="rec-btn rec-btn-view" onclick="openRecording('${vid}', ${cid})">צפייה ←</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    async function toggleWatched(videoId, courseId) {
+      const isWatched = watchedSet.has(videoId);
+      const card = document.getElementById('rec-card-' + videoId);
+      const btn  = document.getElementById('rec-watch-btn-' + videoId);
+      try {
+        const method = isWatched ? 'DELETE' : 'POST';
+        const body = isWatched
+          ? { phone, code, video_id: videoId }
+          : { phone, code, video_id: videoId, course_id: parseInt(courseId) };
+        await fetch('/api/recordings/watched', {
+          method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        if (isWatched) { watchedSet.delete(videoId); } else { watchedSet.add(videoId); }
+        const nowWatched = watchedSet.has(videoId);
+        if (card) card.classList.toggle('watched', nowWatched);
+        if (btn)  { btn.classList.toggle('active', nowWatched); btn.textContent = nowWatched ? 'סומן ✓' : 'סמן כנצפה'; }
+        if (nowWatched && taskMap[videoId]) {
+          fetch(`/api/tasks/${taskMap[videoId]}/complete`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, code }),
+          });
+        }
+      } catch (e) { console.error('toggleWatched', e); }
+    }
+
+    function openNote(videoId) {
+      _recNoteVideoId = videoId;
+      const v = currentRecordings.find(x => x.video_id === videoId);
+      document.getElementById('rec-modal-title-text').textContent = 'הערות — ' + (v ? stripDateFromTitle(v.name) : '');
+      document.getElementById('rec-notes-textarea').value = notesMap[videoId] || '';
+      document.getElementById('rec-modal-saved').style.display = 'none';
+      document.getElementById('rec-notes-modal').classList.add('open');
+    }
+
+    function closeNoteModal() {
+      document.getElementById('rec-notes-modal').classList.remove('open');
+      _recNoteVideoId = null;
+    }
+
+    async function saveRecNote() {
+      const videoId = _recNoteVideoId;
+      if (!videoId) return;
+      const text = document.getElementById('rec-notes-textarea').value.trim();
+      const v = currentRecordings.find(x => x.video_id === videoId);
+      const courseId = v ? (v.course_id || parseInt(_recCurrentCourseId)) : parseInt(_recCurrentCourseId);
+      try {
+        if (text) {
+          await fetch('/api/recordings/notes', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, code, video_id: videoId, course_id: courseId, note: text }),
+          });
+          notesMap[videoId] = text;
+        } else {
+          await fetch('/api/recordings/notes', {
+            method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, code, video_id: videoId }),
+          });
+          delete notesMap[videoId];
+        }
+        const savedEl = document.getElementById('rec-modal-saved');
+        savedEl.style.display = 'block';
+        // refresh note icon
+        const btn = document.querySelector(`#rec-card-${videoId} .rec-btn-note`);
+        if (btn) btn.textContent = notesMap[videoId] ? '📝' : '✏️';
+        setTimeout(() => { closeNoteModal(); savedEl.style.display = 'none'; }, 1500);
+      } catch (e) { console.error('saveNote', e); }
+    }
+
+    async function addRecordingTask(videoId) {
+      const btn = document.getElementById('rec-task-btn-' + videoId);
+      if (btn && btn.disabled) return;
+      const v = currentRecordings.find(x => x.video_id === videoId);
+      if (!v) return;
+      const title = `לצפות בהרצאה ב${_recCurrentCourseName} מתאריך ${v.date || ''}`.trim();
+      try {
+        const res = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, code, title, video_id: videoId }),
+        });
+        if (res.status === 401) { showExpired(); return; }
+        const data = await res.json();
+        taskMap[videoId] = data.task_id;
+        if (btn) { btn.disabled = true; btn.textContent = 'נוסף ✓'; }
+        _showRecToast('משימה הוספה ✓');
+      } catch (e) { console.error('addRecordingTask', e); }
+    }
+
+    function _showRecToast(msg) {
+      const el = document.getElementById('rec-toast');
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 2000);
+    }
+
+    function openRecording(videoId, courseId) {
+      window.open(`/api/recordings/open?phone=${encodeURIComponent(phone)}&code=${encodeURIComponent(code)}&video_id=${encodeURIComponent(videoId)}&course_id=${courseId}`, '_blank');
+    }
+
+    function _showRecStatus(msg) {
+      const el = document.getElementById('rec-status');
+      el.innerHTML = msg; el.style.display = 'block';
+      document.getElementById('rec-grid').innerHTML = '';
+    }
+    function _hideRecStatus() {
+      document.getElementById('rec-status').style.display = 'none';
+    }
+    function _showRecCountdown(seconds) {
+      _clearRecCountdown();
+      let remaining = seconds;
+      const el = document.getElementById('rec-status');
+      el.style.display = 'block';
+      document.getElementById('rec-grid').innerHTML = '';
+      const tick = () => {
+        el.innerHTML = `🔄 מתחבר מחדש למערכת הוידאו...<br><span style="font-size:13px">נסה שוב בעוד ${remaining} שניות</span>`;
+        if (remaining <= 0) { _clearRecCountdown(); loadRecordings(); return; }
+        remaining--;
+        _recCountdownTimer = setTimeout(tick, 1000);
+      };
+      tick();
+    }
+    function _clearRecCountdown() {
+      if (_recCountdownTimer) { clearTimeout(_recCountdownTimer); _recCountdownTimer = null; }
+    }
   </script>
 </body>
 </html>

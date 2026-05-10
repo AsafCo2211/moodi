@@ -114,14 +114,15 @@ async def handle_message(from_number: str, msg_type: str, content: str):
             first_name = row["first_name"]
             conn = get_connection()
             conn.execute("""
-                INSERT INTO users (phone_number, moodle_user_id, wstoken, first_name, is_active)
-                VALUES (?, ?, ?, ?, 1)
+                INSERT INTO users (phone_number, moodle_user_id, wstoken, first_name, private_token, is_active)
+                VALUES (?, ?, ?, ?, ?, 1)
                 ON CONFLICT(phone_number) DO UPDATE SET
                     wstoken=excluded.wstoken,
                     moodle_user_id=excluded.moodle_user_id,
                     first_name=excluded.first_name,
+                    private_token=excluded.private_token,
                     is_active=1
-            """, (from_number, row["moodle_user_id"], row["wstoken"], first_name))
+            """, (from_number, row["moodle_user_id"], row["wstoken"], first_name, row["private_token"]))
             conn.execute(
                 "DELETE FROM pending_registrations WHERE code = ? AND phone_number = ?",
                 (content.strip(), from_number),

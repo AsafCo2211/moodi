@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from config import MOODLE_BASE_URL, MOODLE_USER_AGENT
 from moodle.client import call_moodle
 from database import get_connection
+from auth.token_store import encrypt as tok_encrypt
 
 router = APIRouter()
 
@@ -45,6 +46,7 @@ async def auth_login(body: LoginRequest):
         return JSONResponse(status_code=401, content={"error": "שם משתמש או סיסמה שגויים"})
 
     wstoken = data["token"]
+    private_token = tok_encrypt(data.get("privatetoken"))
 
     site_info = call_moodle(wstoken, "core_webservice_get_site_info", {})
     moodle_user_id = site_info["userid"]
@@ -57,10 +59,10 @@ async def auth_login(body: LoginRequest):
         conn.execute(
             """
             INSERT OR REPLACE INTO pending_registrations
-                (phone_number, code, wstoken, moodle_user_id, first_name, expires_at)
-            VALUES (?, ?, ?, ?, ?, datetime('now', '+10 minutes'))
+                (phone_number, code, wstoken, moodle_user_id, first_name, private_token, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now', '+10 minutes'))
             """,
-            (body.phone, code, wstoken, moodle_user_id, first_name),
+            (body.phone, code, wstoken, moodle_user_id, first_name, private_token),
         )
         conn.commit()
     finally:

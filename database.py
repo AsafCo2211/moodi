@@ -148,6 +148,87 @@ def init_db():
     except Exception:
         pass  # column already exists
 
+    for col, defn in [
+        ("private_token",     "TEXT"),
+        ("moodle_session",    "TEXT"),
+        ("session_expires",   "DATETIME"),
+        ("autologin_last_at", "DATETIME"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE users ADD COLUMN {col} {defn}")
+            conn.commit()
+        except Exception:
+            pass
+
+    try:
+        cursor.execute("ALTER TABLE pending_registrations ADD COLUMN private_token TEXT")
+        conn.commit()
+    except Exception:
+        pass
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS recording_watched (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL,
+            video_id    TEXT NOT NULL,
+            course_id   INTEGER NOT NULL,
+            watched_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, video_id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+    conn.commit()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS recordings (
+            course_id     INTEGER NOT NULL,
+            video_id      TEXT NOT NULL,
+            name          TEXT,
+            lecturer      TEXT,
+            duration      TEXT,
+            date          TEXT,
+            type          TEXT,
+            thumbnail_url TEXT,
+            cached_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (course_id, video_id)
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_recordings_course
+        ON recordings(course_id, cached_at)
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS recording_notes (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id    INTEGER NOT NULL,
+            video_id   TEXT NOT NULL,
+            course_id  INTEGER NOT NULL,
+            note       TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, video_id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+    conn.commit()
+
+    try:
+        cursor.execute("ALTER TABLE recordings ADD COLUMN thumbnail_url TEXT")
+        conn.commit()
+    except Exception:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE recordings ADD COLUMN thumbnail_b64 TEXT")
+        conn.commit()
+    except Exception:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE personal_tasks ADD COLUMN video_id TEXT DEFAULT NULL")
+        conn.commit()
+    except Exception:
+        pass
+
     conn.close()
     logger.info("Database initialized successfully")
 

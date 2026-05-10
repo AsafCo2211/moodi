@@ -1,9 +1,19 @@
+import threading
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from database import get_connection
 from utils.logger import get_logger
+from moodle.recordings import (
+    get_or_refresh_session,
+    get_course_recordings,
+    get_course_recordings_cached,
+    save_recordings_cache,
+    seconds_until_rate_limit_reset,
+)
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -298,3 +308,294 @@ async def refresh_session(body: RefreshSessionBody):
     conn.commit()
     conn.close()
     return {"ok": True}
+
+
+# ── Tasks (recordings shortcut) ───────────────────────────────────────────────
+
+class CreateTaskBody(BaseModel):
+    phone: str
+    code: str
+    title: str
+    video_id: str | None = None
+
+
+@router.post("/api/tasks")
+async def create_task(body: CreateTaskBody):
+    _validate_session(body.phone, body.code)
+    user_id = _get_user_id(body.phone)
+    conn = get_connection()
+    cursor = conn.execute(
+        "INSERT INTO personal_tasks (user_id, title, video_id, status) VALUES (?, ?, ?, 'open')",
+        (user_id, body.title, body.video_id),
+    )
+    task_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return {"task_id": task_id}
+
+
+class CompleteTaskBody(BaseModel):
+    phone: str
+    code: str
+
+
+@router.patch("/api/tasks/{task_id}/complete")
+async def complete_task(task_id: int, body: CompleteTaskBody):
+    """מסמן משימה כהושלמה ומסנכרן צפייה בהקלטה אם קיימת."""
+    _validate_session(body.phone, body.code)
+    user_id = _get_user_id(body.phone)
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT video_id FROM personal_tasks WHERE id=? AND user_id=?",
+        (task_id, user_id),
+    ).fetchone()
+    video_id = row["video_id"] if row else None
+    conn.execute(
+        "UPDATE personal_tasks SET status='deleted' WHERE id=? AND user_id=?",
+        (task_id, user_id),
+    )
+    if video_id:
+        conn.execute(
+            "INSERT OR REPLACE INTO recording_watched (user_id, video_id, course_id) VALUES (?, ?, 0)",
+            (user_id, video_id),
+        )
+    conn.commit()
+    conn.close()
+    return {"ok": True, "video_id": video_id}
+
+
+# ── Recordings ────────────────────────────────────────────────────────────────
+
+@router.get("/api/recordings/courses")
+async def get_recording_courses(phone: str, code: str):
+    _validate_session(phone, code)
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT uc.course_id, uc.course_name
+        FROM user_courses uc
+        LEFT JOIN user_course_settings ucs
+          ON ucs.user_id = uc.user_id AND ucs.course_id = uc.course_id
+        WHERE uc.user_id = (SELECT id FROM users WHERE phone_number = ?)
+          AND (ucs.is_active IS NULL OR ucs.is_active = 1)
+        ORDER BY uc.course_name
+        """,
+        (phone,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def _refresh_recordings_background(course_id: int, user_id: int, wstoken: str, moodle_user_id: int, private_token: str):
+    try:
+        session = get_or_refresh_session(user_id, wstoken, moodle_user_id, private_token)
+        if session:
+            videos = get_course_recordings(session, course_id)
+            if videos:
+                save_recordings_cache(course_id, videos)
+    except Exception as e:
+        logger.error("Background recordings refresh failed for course %s: %s", course_id, e)
+
+
+@router.get("/api/recordings/list")
+async def get_recordings_list(phone: str, code: str, course_id: int):
+    _validate_session(phone, code)
+    conn = get_connection()
+    user = conn.execute(
+        "SELECT id, wstoken, moodle_user_id, private_token, moodle_session, session_expires, autologin_last_at FROM users WHERE phone_number=?",
+        (phone,),
+    ).fetchone()
+    conn.close()
+
+    videos = get_course_recordings_cached(course_id)
+
+    if videos is not None:
+        is_stale = videos[0].get("is_stale", False) if videos else False
+        if is_stale and user and user["private_token"]:
+            threading.Thread(
+                target=_refresh_recordings_background,
+                args=(course_id, user["id"], user["wstoken"], user["moodle_user_id"], user["private_token"]),
+                daemon=True,
+            ).start()
+        for v in videos:
+            v.pop("is_stale", None)
+    else:
+        if not user or not user["private_token"]:
+            return JSONResponse({"error": "reauth_required"}, status_code=401)
+
+        session = get_or_refresh_session(
+            user["id"], user["wstoken"], user["moodle_user_id"], user["private_token"]
+        )
+
+        if session is None:
+            conn = get_connection()
+            row = conn.execute("SELECT autologin_last_at FROM users WHERE id=?", (user["id"],)).fetchone()
+            conn.close()
+            retry_after = seconds_until_rate_limit_reset(row["autologin_last_at"]) if row and row["autologin_last_at"] else 360
+            return JSONResponse({"status": "reconnecting", "retry_after": retry_after}, status_code=503)
+
+        videos = get_course_recordings(session, course_id)
+        save_recordings_cache(course_id, videos)
+
+    if not user:
+        return videos or []
+
+    user_id = user["id"]
+    conn = get_connection()
+    watched_ids = {
+        r["video_id"]
+        for r in conn.execute(
+            "SELECT video_id FROM recording_watched WHERE user_id=?",
+            (user_id,),
+        ).fetchall()
+    }
+    notes_map = {
+        r["video_id"]: r["note"] or ""
+        for r in conn.execute(
+            "SELECT video_id, note FROM recording_notes WHERE user_id=? AND course_id=?",
+            (user_id, course_id),
+        ).fetchall()
+    }
+    tasks_map = {
+        r["video_id"]: r["id"]
+        for r in conn.execute(
+            "SELECT id, video_id FROM personal_tasks WHERE user_id=? AND video_id IS NOT NULL AND status='open'",
+            (user_id,),
+        ).fetchall()
+    }
+    conn.close()
+
+    for v in videos:
+        vid = v.get("video_id", "")
+        v["watched"] = vid in watched_ids
+        v["note"] = notes_map.get(vid, "")
+        v["task_id"] = tasks_map.get(vid)
+        if "thumbnail_url" not in v:
+            from config import MOODLE_BASE_URL
+            v["thumbnail_url"] = f"{MOODLE_BASE_URL}/local/video_directory/thumb.php?id={vid}&second=900&mini=1"
+
+    return videos
+
+
+class WatchedBody(BaseModel):
+    phone: str
+    code: str
+    video_id: str
+    course_id: int
+
+
+@router.post("/api/recordings/watched")
+async def mark_watched(body: WatchedBody):
+    _validate_session(body.phone, body.code)
+    user_id = _get_user_id(body.phone)
+    conn = get_connection()
+    conn.execute(
+        "INSERT OR REPLACE INTO recording_watched (user_id, video_id, course_id) VALUES (?, ?, ?)",
+        (user_id, body.video_id, body.course_id),
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+class UnwatchedBody(BaseModel):
+    phone: str
+    code: str
+    video_id: str
+
+
+@router.delete("/api/recordings/watched")
+async def unmark_watched(body: UnwatchedBody):
+    _validate_session(body.phone, body.code)
+    user_id = _get_user_id(body.phone)
+    conn = get_connection()
+    conn.execute(
+        "DELETE FROM recording_watched WHERE user_id=? AND video_id=?",
+        (user_id, body.video_id),
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+class NoteBody(BaseModel):
+    phone: str
+    code: str
+    video_id: str
+    course_id: int
+    note: str
+
+
+@router.post("/api/recordings/notes")
+async def save_note(body: NoteBody):
+    _validate_session(body.phone, body.code)
+    user_id = _get_user_id(body.phone)
+    conn = get_connection()
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO recording_notes (user_id, video_id, course_id, note, updated_at)
+        VALUES (?, ?, ?, ?, datetime('now'))
+        """,
+        (user_id, body.video_id, body.course_id, body.note),
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+class DeleteNoteBody(BaseModel):
+    phone: str
+    code: str
+    video_id: str
+
+
+@router.delete("/api/recordings/notes")
+async def delete_note(body: DeleteNoteBody):
+    _validate_session(body.phone, body.code)
+    user_id = _get_user_id(body.phone)
+    conn = get_connection()
+    conn.execute(
+        "DELETE FROM recording_notes WHERE user_id=? AND video_id=?",
+        (user_id, body.video_id),
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+@router.get("/api/recordings/open")
+async def open_recording(phone: str, code: str, video_id: str, course_id: int):
+    _validate_session(phone, code)
+    conn = get_connection()
+    user = conn.execute(
+        "SELECT id, wstoken, moodle_user_id, private_token, autologin_last_at FROM users WHERE phone_number=?",
+        (phone,),
+    ).fetchone()
+    conn.close()
+
+    if not user or not user["private_token"]:
+        raise HTTPException(status_code=401, detail="reauth_required")
+
+    session = get_or_refresh_session(
+        user["id"], user["wstoken"], user["moodle_user_id"], user["private_token"]
+    )
+
+    if session is None:
+        conn = get_connection()
+        row = conn.execute("SELECT autologin_last_at FROM users WHERE id=?", (user["id"],)).fetchone()
+        conn.close()
+        retry_after = seconds_until_rate_limit_reset(row["autologin_last_at"]) if row and row["autologin_last_at"] else 360
+        return JSONResponse({"status": "reconnecting", "retry_after": retry_after}, status_code=503)
+
+    from config import MOODLE_BASE_URL
+    target = f"{MOODLE_BASE_URL}/blocks/video/viewvideo.php?id={video_id}&courseid={course_id}&type=2"
+    response = RedirectResponse(url=target, status_code=302)
+    response.set_cookie(
+        key="MoodleSession",
+        value=session,
+        domain="moodle.bgu.ac.il",
+        path="/",
+        httponly=True,
+        samesite="lax",
+    )
+    return response
