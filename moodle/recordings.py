@@ -290,15 +290,31 @@ def poll_all_recordings() -> None:
     skipped = 0
     for row in courses:
         cid = row["course_id"]
-        cached = get_course_recordings_cached(cid)
-        if cached is not None and not cached[0].get("is_stale", True):
+
+        conn = get_connection()
+        cache_row = conn.execute(
+            "SELECT MAX(cached_at) as newest FROM recordings WHERE course_id=?",
+            (cid,)
+        ).fetchone()
+        conn.close()
+        newest = cache_row["newest"] if cache_row else None
+
+        if newest is None:
+            logger.debug("course %s: no cache — refreshing", cid)
+        elif (datetime.utcnow() - datetime.fromisoformat(newest)).total_seconds() < 3600:
+            logger.debug("course %s: fresh cache (%s) — skipping", cid, newest)
             skipped += 1
             continue
+        else:
+            logger.debug("course %s: stale cache (%s) — refreshing", cid, newest)
+
         success = poll_recordings_for_course(cid)
         if success:
             refreshed += 1
+        else:
+            logger.debug("course %s: poll returned no results", cid)
 
-    logger.info("poll_all_recordings: refreshed=%d skipped=%d (cache hit)", refreshed, skipped)
+    logger.info("poll_all_recordings: refreshed=%d skipped=%d", refreshed, skipped)
 
 
 def seconds_until_rate_limit_reset(autologin_last_at_iso: str) -> int:
