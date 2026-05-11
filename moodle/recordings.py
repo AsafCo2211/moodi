@@ -301,7 +301,7 @@ def poll_all_recordings() -> None:
 
         if newest is None:
             logger.debug("course %s: no cache — refreshing", cid)
-        elif (datetime.utcnow() - datetime.fromisoformat(newest)).total_seconds() < 3600:
+        elif (_dt.utcnow() - _dt.fromisoformat(newest)).total_seconds() < 3600:
             logger.debug("course %s: fresh cache (%s) — skipping", cid, newest)
             skipped += 1
             continue
