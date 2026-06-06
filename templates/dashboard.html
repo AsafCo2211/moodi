@@ -33,10 +33,8 @@
 
     .logo-icon {
       width: 34px; height: 34px;
-      background: #ea580c;
       border-radius: 9px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 17px; font-weight: 800; color: #fff;
+      object-fit: cover;
       flex-shrink: 0;
     }
 
@@ -105,10 +103,8 @@
 
     .sidebar-logo-icon {
       width: 32px; height: 32px;
-      background: #ea580c;
       border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 16px; font-weight: 800; color: #fff;
+      object-fit: cover;
       flex-shrink: 0;
     }
 
@@ -988,7 +984,7 @@
   <!-- Header -->
   <div class="header">
     <div class="header-brand">
-      <div class="logo-icon">מ</div>
+      <img class="logo-icon" src="/static/logo.png" alt="מודי לוגו" />
       <div>
         <div class="logo-text">מודי</div>
         <div class="logo-sub">הדאשבורד שלי</div>
@@ -1007,7 +1003,7 @@
     <!-- Sidebar — first in DOM → physical RIGHT in RTL flex -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-logo">
-        <div class="sidebar-logo-icon">מ</div>
+        <img class="sidebar-logo-icon" src="/static/logo.png" alt="מודי לוגו" />
         <span class="sidebar-logo-text">מודי</span>
       </div>
 

@@ -5,6 +5,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from bot.webhook import router as webhook_router
 from auth.webview import router as auth_router
 from auth.dashboard import router as dashboard_router
@@ -15,6 +16,7 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 app = FastAPI(title="Moodi")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.on_event("startup")
